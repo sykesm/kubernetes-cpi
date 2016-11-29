@@ -41,6 +41,14 @@ func (c Config) NewClient(context string) (kubernetes.Interface, error) {
 	return kubernetes.NewForConfig(rc)
 }
 
+func (c Config) DefaultNamespace() string {
+	ns := "default"
+	if dc := c.Contexts[c.CurrentContext]; dc != nil && len(dc.Namespace) != 0 {
+		ns = dc.Namespace
+	}
+	return ns
+}
+
 func (c Config) ClientConfig() *clientcmdapi.Config {
 	cc := clientcmdapi.NewConfig()
 	for k, v := range c.Clusters {

@@ -16,6 +16,7 @@ import (
 
 var _ = Describe("Config", func() {
 	var configData []byte
+	var conf config.Config
 
 	BeforeEach(func() {
 		configData = []byte(`{
@@ -25,7 +26,8 @@ var _ = Describe("Config", func() {
 			},
 			"contexts": {
 				"bosh": { "cluster": "bosh", "user": "bosh", "namespace": "bosh" },
-				"minikube": { "cluster": "minikube", "user": "minikube", "namespace": "minikube" }
+				"minikube": { "cluster": "minikube", "user": "minikube", "namespace": "minikube" },
+				"no-namespace": { "cluster": "bosh", "user": "minikube" }
 			},
 			"current_context": "minikube",
 			"users": {
@@ -33,13 +35,12 @@ var _ = Describe("Config", func() {
 				"minikube": { "client_certificate_data": "client-certificate-data", "client_key_data": "client-key-data" }
 			}
 		}`)
+
+		err := json.Unmarshal([]byte(configData), &conf)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("deserializes the config file", func() {
-		var conf config.Config
-		err := json.Unmarshal([]byte(configData), &conf)
-		Expect(err).NotTo(HaveOccurred())
-
 		Expect(conf.Clusters).To(HaveLen(2))
 		Expect(conf.Clusters["bosh"]).To(Equal(&config.Cluster{
 			Server:                "https://192.168.64.17:8443",
@@ -50,7 +51,7 @@ var _ = Describe("Config", func() {
 			CertificateAuthorityData: "certificate-authority-data",
 		}))
 
-		Expect(conf.Contexts).To(HaveLen(2))
+		Expect(conf.Contexts).To(HaveLen(3))
 		Expect(conf.Contexts["bosh"]).To(Equal(&config.Context{
 			Cluster:   "bosh",
 			AuthInfo:  "bosh",
@@ -60,6 +61,10 @@ var _ = Describe("Config", func() {
 			Cluster:   "minikube",
 			AuthInfo:  "minikube",
 			Namespace: "minikube",
+		}))
+		Expect(conf.Contexts["no-namespace"]).To(Equal(&config.Context{
+			Cluster:  "bosh",
+			AuthInfo: "minikube",
 		}))
 
 		Expect(conf.AuthInfos).To(HaveLen(2))
@@ -73,6 +78,22 @@ var _ = Describe("Config", func() {
 		}))
 
 		Expect(conf.CurrentContext).To(Equal("minikube"))
+	})
+
+	Describe("DefaultNamespace", func() {
+		It("returns the namespace from the default context", func() {
+			Expect(conf.DefaultNamespace()).To(Equal("minikube"))
+		})
+
+		Context("when the default context is missing a namespace", func() {
+			BeforeEach(func() {
+				conf.CurrentContext = "no-namespace"
+			})
+
+			It("uses 'default' as the namespace", func() {
+				Expect(conf.DefaultNamespace()).To(Equal("default"))
+			})
+		})
 	})
 
 	Describe("ClientConfig", func() {
@@ -157,13 +178,6 @@ var _ = Describe("Config", func() {
 	})
 
 	Describe("NonInteractiveClientConfig", func() {
-		var conf config.Config
-
-		BeforeEach(func() {
-			err := json.Unmarshal([]byte(configData), &conf)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
 		It("wraps the result of ClientConfig", func() {
 			cc := conf.NonInteractiveClientConfig("bosh")
 			rawConfig, err := cc.RawConfig()
@@ -194,12 +208,8 @@ var _ = Describe("Config", func() {
 
 	Describe("NewClient", func() {
 		var server *ghttp.Server
-		var conf config.Config
 
 		BeforeEach(func() {
-			err := json.Unmarshal([]byte(configData), &conf)
-			Expect(err).NotTo(HaveOccurred())
-
 			server = ghttp.NewTLSServer()
 			conf.Clusters["bosh"].Server = server.URL()
 			conf.Clusters["bosh"].InsecureSkipTLSVerify = true
