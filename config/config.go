@@ -1,12 +1,14 @@
 package config
 
 import (
+	"k8s.io/client-go/1.4/kubernetes"
 	"k8s.io/client-go/1.4/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/1.4/tools/clientcmd/api"
 )
 
 type Cluster struct {
 	Server                   string `json:"server"`
+	InsecureSkipTLSVerify    bool   `json:"insecure_skip_tls_verify,omitempty"`
 	CertificateAuthorityData string `json:"certificate_authority_data"`
 }
 
@@ -31,6 +33,14 @@ type Config struct {
 	CurrentContext string               `json:"current_context"`
 }
 
+func (c Config) NewClient(context string) (kubernetes.Interface, error) {
+	rc, err := c.NonInteractiveClientConfig(context).ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(rc)
+}
+
 func (c Config) ClientConfig() *clientcmdapi.Config {
 	cc := clientcmdapi.NewConfig()
 	for k, v := range c.Clusters {
@@ -47,12 +57,11 @@ func (c Config) ClientConfig() *clientcmdapi.Config {
 	return cc
 }
 
-func (c Config) DefaultClientConfig() clientcmd.ClientConfig {
-	return clientcmd.NewNonInteractiveClientConfig(*c.ClientConfig(), c.CurrentContext, &clientcmd.ConfigOverrides{}, nil)
-}
-
 func (c Config) NonInteractiveClientConfig(context string) clientcmd.ClientConfig {
-	return clientcmd.NewNonInteractiveClientConfig(*c.ClientConfig(), context, &clientcmd.ConfigOverrides{}, nil)
+	if len(context) == 0 {
+		context = c.CurrentContext
+	}
+	return clientcmd.NewNonInteractiveClientConfig(*c.ClientConfig(), context, &clientcmd.ConfigOverrides{}, &clientcmd.ClientConfigLoadingRules{})
 }
 
 func (a *AuthInfo) api() *clientcmdapi.AuthInfo {
@@ -72,6 +81,7 @@ func (a *AuthInfo) api() *clientcmdapi.AuthInfo {
 func (c *Cluster) api() *clientcmdapi.Cluster {
 	cluster := clientcmdapi.NewCluster()
 	cluster.Server = c.Server
+	cluster.InsecureSkipTLSVerify = c.InsecureSkipTLSVerify
 	if len(c.CertificateAuthorityData) != 0 {
 		cluster.CertificateAuthorityData = []byte(c.CertificateAuthorityData)
 	}

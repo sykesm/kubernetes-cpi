@@ -2,12 +2,15 @@ package config_test
 
 import (
 	"encoding/json"
+	"net/http"
 
+	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/runtime"
 	clientcmdapi "k8s.io/client-go/1.4/tools/clientcmd/api"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/ghttp"
 	"github.com/sykesm/kubernetes-cpi/config"
 )
 
@@ -17,14 +20,16 @@ var _ = Describe("Config", func() {
 	BeforeEach(func() {
 		configData = []byte(`{
 			"clusters": {
+				"bosh": { "server": "https://192.168.64.17:8443", "insecure_skip_tls_verify": true },
 				"minikube": { "certificate_authority_data": "certificate-authority-data", "server": "https://192.168.64.17:8443" }
 			},
 			"contexts": {
-				"minikube": { "cluster": "minikube", "user": "minikube", "namespace": "minikube" },
-				"bosh": { "cluster": "minikube", "user": "minikube", "namespace": "bosh" }
+				"bosh": { "cluster": "bosh", "user": "bosh", "namespace": "bosh" },
+				"minikube": { "cluster": "minikube", "user": "minikube", "namespace": "minikube" }
 			},
 			"current_context": "minikube",
 			"users": {
+				"bosh": { "username": "user", "password": "password" },
 				"minikube": { "client_certificate_data": "client-certificate-data", "client_key_data": "client-key-data" }
 			}
 		}`)
@@ -35,25 +40,33 @@ var _ = Describe("Config", func() {
 		err := json.Unmarshal([]byte(configData), &conf)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(conf.Clusters).To(HaveLen(1))
+		Expect(conf.Clusters).To(HaveLen(2))
+		Expect(conf.Clusters["bosh"]).To(Equal(&config.Cluster{
+			Server:                "https://192.168.64.17:8443",
+			InsecureSkipTLSVerify: true,
+		}))
 		Expect(conf.Clusters["minikube"]).To(Equal(&config.Cluster{
 			Server: "https://192.168.64.17:8443",
 			CertificateAuthorityData: "certificate-authority-data",
 		}))
 
 		Expect(conf.Contexts).To(HaveLen(2))
+		Expect(conf.Contexts["bosh"]).To(Equal(&config.Context{
+			Cluster:   "bosh",
+			AuthInfo:  "bosh",
+			Namespace: "bosh",
+		}))
 		Expect(conf.Contexts["minikube"]).To(Equal(&config.Context{
 			Cluster:   "minikube",
 			AuthInfo:  "minikube",
 			Namespace: "minikube",
 		}))
-		Expect(conf.Contexts["bosh"]).To(Equal(&config.Context{
-			Cluster:   "minikube",
-			AuthInfo:  "minikube",
-			Namespace: "bosh",
-		}))
 
-		Expect(conf.AuthInfos).To(HaveLen(1))
+		Expect(conf.AuthInfos).To(HaveLen(2))
+		Expect(conf.AuthInfos["bosh"]).To(Equal(&config.AuthInfo{
+			Username: "user",
+			Password: "password",
+		}))
 		Expect(conf.AuthInfos["minikube"]).To(Equal(&config.AuthInfo{
 			ClientCertificateData: "client-certificate-data",
 			ClientKeyData:         "client-key-data",
@@ -143,29 +156,6 @@ var _ = Describe("Config", func() {
 		})
 	})
 
-	Describe("DefaultClientConfig", func() {
-		var conf config.Config
-
-		BeforeEach(func() {
-			err := json.Unmarshal([]byte(configData), &conf)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("wraps the result of ClientConfig", func() {
-			defaultCC := conf.DefaultClientConfig()
-			Expect(defaultCC.RawConfig()).To(Equal(*conf.ClientConfig()))
-		})
-
-		It("is associated with the current context's namespace", func() {
-			Expect(conf.Contexts[conf.CurrentContext].Namespace).To(Equal("minikube"))
-
-			ns, override, err := conf.DefaultClientConfig().Namespace()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ns).To(Equal("minikube"))
-			Expect(override).To(BeFalse())
-		})
-	})
-
 	Describe("NonInteractiveClientConfig", func() {
 		var conf config.Config
 
@@ -174,13 +164,67 @@ var _ = Describe("Config", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("is associated with the current context's namespace", func() {
+		It("wraps the result of ClientConfig", func() {
+			cc := conf.NonInteractiveClientConfig("bosh")
+			rawConfig, err := cc.RawConfig()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rawConfig).To(Equal(*conf.ClientConfig()))
+		})
+
+		It("is associated with the requested context", func() {
 			Expect(conf.Contexts[conf.CurrentContext].Namespace).NotTo(Equal("bosh"))
 
 			ns, override, err := conf.NonInteractiveClientConfig("bosh").Namespace()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ns).To(Equal("bosh"))
 			Expect(override).To(BeFalse())
+		})
+
+		Context("when the requested context is empty", func() {
+			It("is uses the default context", func() {
+				Expect(conf.Contexts[conf.CurrentContext].Namespace).NotTo(Equal("bosh"))
+
+				ns, override, err := conf.NonInteractiveClientConfig("").Namespace()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ns).To(Equal("minikube"))
+				Expect(override).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("NewClient", func() {
+		var server *ghttp.Server
+		var conf config.Config
+
+		BeforeEach(func() {
+			err := json.Unmarshal([]byte(configData), &conf)
+			Expect(err).NotTo(HaveOccurred())
+
+			server = ghttp.NewTLSServer()
+			conf.Clusters["bosh"].Server = server.URL()
+			conf.Clusters["bosh"].InsecureSkipTLSVerify = true
+
+			server.AppendHandlers(ghttp.CombineHandlers(
+				ghttp.VerifyRequest("GET", "/api/v1/namespaces/namespace/pods/podname"),
+				ghttp.VerifyBasicAuth("user", "password"),
+				ghttp.RespondWithJSONEncoded(
+					http.StatusOK,
+					v1.Pod{ObjectMeta: v1.ObjectMeta{Name: "podname", Namespace: "namespace"}},
+				),
+			))
+		})
+
+		It("creates a kubernetes client", func() {
+			intf, err := conf.NewClient("bosh")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(intf).NotTo(BeNil())
+
+			pod, err := intf.Core().Pods("namespace").Get("podname")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(server.ReceivedRequests()).To(HaveLen(1))
+
+			Expect(pod.Name).To(Equal("podname"))
+			Expect(pod.Namespace).To(Equal("namespace"))
 		})
 	})
 })
