@@ -9,5 +9,5 @@ import (
 
 func TestCpi(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cpi Suite")
+	RunSpecs(t, "CPI Suite")
 }

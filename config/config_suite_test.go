@@ -1,4 +1,4 @@
-package main_test
+package config_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCpi(t *testing.T) {
+func TestConfig(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "CPI Command Suite")
+	RunSpecs(t, "Config Suite")
 }

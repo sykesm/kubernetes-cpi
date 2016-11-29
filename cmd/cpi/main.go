@@ -2,15 +2,35 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 
 	"github.com/sykesm/kubernetes-cpi/actions"
+	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
 )
 
+var configFlag = flag.String(
+	"config",
+	"",
+	"Path to the serialized configuration file",
+)
+
 func main() {
+	configFile, err := os.Open(*configFlag)
+	if err != nil {
+		panic(err)
+	}
+	defer configFile.Close()
+
+	var conf config.Config
+	err = json.NewDecoder(configFile).Decode(&conf)
+	if err != nil {
+		panic(err)
+	}
+
 	payload, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
 		panic(err)
@@ -26,6 +46,7 @@ func main() {
 
 	var result *cpi.Response
 	switch req.Method {
+
 	// Stemcell Management
 	case "create_stemcell":
 		result, err = cpi.Dispatch(&req, CreateStemcell)

@@ -6,7 +6,6 @@ import (
 )
 
 var _ = Describe("main", func() {
-
 	Describe("CreateStemcell", func() {
 		var input string
 
@@ -14,7 +13,7 @@ var _ = Describe("main", func() {
 			input = `{
 				"method": "create_stemcell",
 				"arguments": [
-					"/Users/cfdojo/.bosh_init/installations/c281af0b-7cf8-4094-772a-937cee3ec101/tmp/stemcell-manager488652969/image",
+					"/tmp/stemcell-manager488652969/image",
 					{ "image": "sykesm/kubernetes-stemcell:3309" }
 				],
 				"context": {

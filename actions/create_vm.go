@@ -89,6 +89,9 @@ func createNamespace(coreClient core.CoreInterface, namespace string) error {
 }
 
 func createService(serviceClient core.ServiceInterface, agentID string, vip string) (*v1.Service, error) {
+	// Need to provide a way to explicitly associate services.
+	// For the director, we will need 22 (ssh) and 25555 (director).
+	// During bosh-init, the agent will need to expose 6868.
 	return serviceClient.Create(&v1.Service{
 		ObjectMeta: v1.ObjectMeta{
 			Name: "agent-" + agentID,
