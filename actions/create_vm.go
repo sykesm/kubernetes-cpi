@@ -1,31 +1,43 @@
 package actions
 
 import (
+	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
 
-	"k8s.io/client-go/1.4/kubernetes"
 	core "k8s.io/client-go/1.4/kubernetes/typed/core/v1"
 	kubeerrors "k8s.io/client-go/1.4/pkg/api/errors"
 	"k8s.io/client-go/1.4/pkg/api/resource"
 	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	"k8s.io/client-go/1.4/pkg/api/v1"
-	"k8s.io/client-go/1.4/rest"
 )
 
-type Cluster struct {
-	Server     string `json:"server"`
-	CACert     string `json:"ca_cert"`
-	ClientCert string `json:"client_cert"`
-	ClientKey  string `json:"client_key"`
-}
-
 type VMCloudProperties struct {
-	Cluster   Cluster `json:"cluster"`
-	Namespace string  `json:"namespace"`
+	Context   string `json:"context"`
+	Namespace string `json:"namespace"`
 }
 
-func CreateVM(agentID string, stemcellCID cpi.StemcellCID, cloudProps VMCloudProperties, networks cpi.Networks, diskCIDs []cpi.DiskCID, env cpi.Environment) (cpi.VMCID, error) {
-	clientSet, err := ClusterClient(&cloudProps.Cluster)
+type VMCreator struct {
+	Config config.Config
+}
+
+func (v *VMCreator) Create(
+	agentID string,
+	stemcellCID cpi.StemcellCID,
+	cloudProps VMCloudProperties,
+	networks cpi.Networks,
+	diskCIDs []cpi.DiskCID,
+	env cpi.Environment,
+) (cpi.VMCID, error) {
+	if len(cloudProps.Context) == 0 {
+		cloudProps.Context = v.Config.Context()
+	}
+
+	if len(cloudProps.Namespace) == 0 {
+		cloudProps.Namespace = v.Config.Namespace()
+	}
+
+	// create the client set
+	clientSet, err := v.Config.NewClient(cloudProps.Context)
 	if err != nil {
 		return "", err
 	}
@@ -49,22 +61,6 @@ func CreateVM(agentID string, stemcellCID cpi.StemcellCID, cloudProps VMCloudPro
 	}
 
 	return cpi.VMCID("foo"), nil
-}
-
-func ClusterClient(cluster *Cluster) (kubernetes.Interface, error) {
-	config := &rest.Config{
-		Host: cluster.Server,
-		TLSClientConfig: rest.TLSClientConfig{
-			CAData:   []byte(cluster.CACert),
-			CertData: []byte(cluster.ClientCert),
-			KeyData:  []byte(cluster.ClientKey),
-		},
-		ContentConfig: rest.ContentConfig{
-			GroupVersion: &v1.SchemeGroupVersion,
-		},
-	}
-
-	return kubernetes.NewForConfig(config)
 }
 
 func createNamespace(coreClient core.CoreInterface, namespace string) error {

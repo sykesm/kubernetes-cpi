@@ -80,18 +80,24 @@ var _ = Describe("Config", func() {
 		Expect(conf.CurrentContext).To(Equal("minikube"))
 	})
 
-	Describe("DefaultNamespace", func() {
-		It("returns the namespace from the default context", func() {
-			Expect(conf.DefaultNamespace()).To(Equal("minikube"))
+	Describe("Context", func() {
+		It("returns the name of the current context", func() {
+			Expect(conf.Context()).To(Equal("minikube"))
+		})
+	})
+
+	Describe("Namespace", func() {
+		It("returns the namespace from the current context", func() {
+			Expect(conf.Namespace()).To(Equal("minikube"))
 		})
 
-		Context("when the default context is missing a namespace", func() {
+		Context("when the current context is missing a namespace", func() {
 			BeforeEach(func() {
 				conf.CurrentContext = "no-namespace"
 			})
 
 			It("uses 'default' as the namespace", func() {
-				Expect(conf.DefaultNamespace()).To(Equal("default"))
+				Expect(conf.Namespace()).To(Equal("default"))
 			})
 		})
 	})

@@ -41,7 +41,11 @@ func (c Config) NewClient(context string) (kubernetes.Interface, error) {
 	return kubernetes.NewForConfig(rc)
 }
 
-func (c Config) DefaultNamespace() string {
+func (c Config) Context() string {
+	return c.CurrentContext
+}
+
+func (c Config) Namespace() string {
 	ns := "default"
 	if dc := c.Contexts[c.CurrentContext]; dc != nil && len(dc.Namespace) != 0 {
 		ns = dc.Namespace

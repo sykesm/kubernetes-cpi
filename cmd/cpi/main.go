@@ -12,21 +12,23 @@ import (
 	"github.com/sykesm/kubernetes-cpi/cpi"
 )
 
-var configFlag = flag.String(
-	"config",
+var kubeConfigFlag = flag.String(
+	"kubeConfig",
 	"",
 	"Path to the serialized configuration file",
 )
 
 func main() {
-	configFile, err := os.Open(*configFlag)
+	flag.Parse()
+
+	kubeConfigFile, err := os.Open(*kubeConfigFlag)
 	if err != nil {
 		panic(err)
 	}
-	defer configFile.Close()
+	defer kubeConfigFile.Close()
 
 	var conf config.Config
-	err = json.NewDecoder(configFile).Decode(&conf)
+	err = json.NewDecoder(kubeConfigFile).Decode(&conf)
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +58,8 @@ func main() {
 
 	// VM management
 	case "create_vm":
-		result, err = cpi.Dispatch(&req, actions.CreateVM)
+		vmCreator := &actions.VMCreator{Config: conf}
+		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
 	case "delete_vm":
 		result, err = cpi.Dispatch(&req, DeleteVM)
