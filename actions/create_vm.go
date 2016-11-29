@@ -1,6 +1,9 @@
 package actions
 
 import (
+	"encoding/json"
+
+	"github.com/sykesm/kubernetes-cpi/agent"
 	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
 
@@ -11,13 +14,13 @@ import (
 	"k8s.io/client-go/1.4/pkg/api/v1"
 )
 
+type VMCreator struct {
+	Config config.Config
+}
+
 type VMCloudProperties struct {
 	Context   string `json:"context"`
 	Namespace string `json:"namespace"`
-}
-
-type VMCreator struct {
-	Config config.Config
 }
 
 func (v *VMCreator) Create(
@@ -48,6 +51,17 @@ func (v *VMCreator) Create(
 		return "", err
 	}
 
+	instanceSettings, err := v.InstanceSettings(agentID, networks, env)
+	if err != nil {
+		return "", err
+	}
+
+	// create the config map
+	_, err = createConfigMap(clientSet.Core().ConfigMaps(cloudProps.Namespace), agentID, instanceSettings)
+	if err != nil {
+		return "", err
+	}
+
 	// create the service
 	_, err = createService(clientSet.Core().Services(cloudProps.Namespace), agentID, "")
 	if err != nil {
@@ -61,6 +75,42 @@ func (v *VMCreator) Create(
 	}
 
 	return cpi.VMCID("foo"), nil
+}
+
+func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env cpi.Environment) (*agent.Settings, error) {
+	agentNetworks := agent.Networks{}
+	for name, cpiNetwork := range networks {
+		agentNetwork := agent.Network{}
+		if err := cpi.Remarshal(cpiNetwork, &agentNetwork); err != nil {
+			return nil, err
+		}
+		agentNetwork.Preconfigured = true
+		agentNetworks[name] = agentNetwork
+	}
+
+	settings := &agent.Settings{
+		AgentID: agentID,
+		VM:      agent.VM{Name: agentID},
+		Env:     env,
+
+		Networks: agentNetworks,
+		Disks: agent.Disks{
+			Persistent: map[string]string{
+				"not-implemented": "/mnt/persistent",
+			},
+		},
+
+		// TODO: Get from config file
+		NTPServers: []string{"0.pool.ntp.org", "1.pool.ntp.org"},
+		MessageBus: "https://admin:adminpass@0.0.0.0:6868",
+		Blobstore: agent.Blobstore{
+			Type: "local",
+			Options: map[string]interface{}{
+				"blobstore_path": "/var/vcap/micro_bosh/data/cache",
+			},
+		},
+	}
+	return settings, nil
 }
 
 func createNamespace(coreClient core.CoreInterface, namespace string) error {
@@ -84,6 +134,25 @@ func createNamespace(coreClient core.CoreInterface, namespace string) error {
 	return err
 }
 
+func createConfigMap(configMapService core.ConfigMapInterface, agentID string, instanceSettings *agent.Settings) (*v1.ConfigMap, error) {
+	instanceJSON, err := json.Marshal(instanceSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	return configMapService.Create(&v1.ConfigMap{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "agent-" + agentID,
+			Labels: map[string]string{
+				"bosh.cloudfoundry.org/agent-id": agentID,
+			},
+		},
+		Data: map[string]string{
+			"instance_settings": string(instanceJSON),
+		},
+	})
+}
+
 func createService(serviceClient core.ServiceInterface, agentID string, vip string) (*v1.Service, error) {
 	// Need to provide a way to explicitly associate services.
 	// For the director, we will need 22 (ssh) and 25555 (director).
@@ -98,7 +167,7 @@ func createService(serviceClient core.ServiceInterface, agentID string, vip stri
 		Spec: v1.ServiceSpec{
 			Type: v1.ServiceTypeNodePort,
 			Ports: []v1.ServicePort{{
-				NodePort: 32068,
+				NodePort: 32068, // FIXME
 				Port:     6868,
 			}},
 			ClusterIP: vip,
@@ -141,12 +210,8 @@ func createPod(podClient core.PodInterface, agentID string, image string) (*v1.P
 				},
 				VolumeMounts: []v1.VolumeMount{{
 					Name:      "bosh-config",
-					MountPath: "/var/vcap/bosh/kubernetes-cpi-agent-settings.json",
-					SubPath:   "kubernetes-cpi-agent-settings.json",
-				}, {
-					Name:      "bosh-config",
-					MountPath: "/var/vcap/bosh/agent.json",
-					SubPath:   "agent.json",
+					MountPath: "/var/vcap/bosh/instance_settings.json",
+					SubPath:   "instance_settings.json",
 				}, {
 					Name:      "agent-pv",
 					MountPath: "/mnt/persistent",
@@ -157,14 +222,11 @@ func createPod(podClient core.PodInterface, agentID string, image string) (*v1.P
 				VolumeSource: v1.VolumeSource{
 					ConfigMap: &v1.ConfigMapVolumeSource{
 						LocalObjectReference: v1.LocalObjectReference{
-							Name: "agent-foo", // FIXME
+							Name: "agent-" + agentID,
 						},
 						Items: []v1.KeyToPath{{
-							Key:  "infrastructure_settings",
-							Path: "kubernetes-cpi-agent-settings.json",
-						}, {
-							Key:  "agent_settings",
-							Path: "agent.json",
+							Key:  "instance_settings",
+							Path: "instance_settings.json",
 						}},
 					},
 				},
