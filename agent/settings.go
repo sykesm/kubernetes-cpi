@@ -4,19 +4,13 @@ type Settings struct {
 	AgentID    string   `json:"agent_id"`
 	Disks      Disks    `json:"disks,omitempty"`
 	Networks   Networks `json:"networks,omitempty"`
-	NTPServers []string `json:"ntp,omitempty"`
 	MessageBus string   `json:"mbus"`
+	NTPServers []string `json:"ntp,omitempty"`
 	VM         VM       `json:"vm"`
 
 	// These are just carried along from bosh
 	Blobstore interface{} `json:"blobstore,omitempty"`
 	Env       interface{} `json:"env,omitempty"`
-}
-
-// TODO: remove
-type Blobstore struct {
-	Type    string                 `json:"provider"`
-	Options map[string]interface{} `json:"options"`
 }
 
 type Disks struct {

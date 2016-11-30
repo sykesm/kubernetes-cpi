@@ -12,6 +12,12 @@ import (
 	"github.com/sykesm/kubernetes-cpi/cpi"
 )
 
+var agentConfigFlag = flag.String(
+	"agentConfig",
+	"",
+	"Path to serialized agent configuration data",
+)
+
 var kubeConfigFlag = flag.String(
 	"kubeConfig",
 	"",
@@ -29,6 +35,18 @@ func main() {
 
 	var kubeConf config.Kubernetes
 	err = json.NewDecoder(kubeConfigFile).Decode(&kubeConf)
+	if err != nil {
+		panic(err)
+	}
+
+	agentConfigFile, err := os.Open(*agentConfigFlag)
+	if err != nil {
+		panic(err)
+	}
+	defer agentConfigFile.Close()
+
+	var agentConf config.Agent
+	err = json.NewDecoder(agentConfigFile).Decode(&agentConf)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +76,10 @@ func main() {
 
 	// VM management
 	case "create_vm":
-		vmCreator := &actions.VMCreator{KubeConfig: kubeConf}
+		vmCreator := &actions.VMCreator{
+			KubeConfig:  kubeConf,
+			AgentConfig: agentConf,
+		}
 		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
 	case "delete_vm":

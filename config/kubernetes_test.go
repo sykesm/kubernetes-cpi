@@ -40,7 +40,7 @@ var _ = Describe("Kubernetes Config", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("deserializes the config file", func() {
+	It("deserializes the config data", func() {
 		Expect(kubeConf.Clusters).To(HaveLen(2))
 		Expect(kubeConf.Clusters["bosh"]).To(Equal(&config.Cluster{
 			Server:                "https://192.168.64.17:8443",

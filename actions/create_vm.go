@@ -15,7 +15,8 @@ import (
 )
 
 type VMCreator struct {
-	KubeConfig config.Kubernetes
+	KubeConfig  config.Kubernetes
+	AgentConfig config.Agent
 }
 
 type VMCloudProperties struct {
@@ -89,24 +90,18 @@ func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env 
 	}
 
 	settings := &agent.Settings{
+		Blobstore:  v.AgentConfig.Blobstore,
+		MessageBus: v.AgentConfig.MessageBus,
+		NTPServers: v.AgentConfig.NTPServers,
+
 		AgentID: agentID,
 		VM:      agent.VM{Name: agentID},
-		Env:     env,
 
+		Env:      env,
 		Networks: agentNetworks,
 		Disks: agent.Disks{
 			Persistent: map[string]string{
 				"not-implemented": "/mnt/persistent",
-			},
-		},
-
-		// TODO: Get from config file
-		NTPServers: []string{"0.pool.ntp.org", "1.pool.ntp.org"},
-		MessageBus: "https://admin:adminpass@0.0.0.0:6868",
-		Blobstore: agent.Blobstore{
-			Type: "local",
-			Options: map[string]interface{}{
-				"blobstore_path": "/var/vcap/micro_bosh/data/cache",
 			},
 		},
 	}
