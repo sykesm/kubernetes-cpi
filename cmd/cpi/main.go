@@ -76,20 +76,14 @@ func main() {
 
 	// VM management
 	case "create_vm":
-		vmCreator := &actions.VMCreator{
-			KubeConfig:  kubeConf,
-			AgentConfig: agentConf,
-		}
+		vmCreator := &actions.VMCreator{KubeConfig: kubeConf, AgentConfig: agentConf}
 		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
 	case "delete_vm":
 		result, err = cpi.Dispatch(&req, DeleteVM)
 
 	case "has_vm":
-		vmFinder := &actions.VMFinder{
-			KubeConfig:  kubeConf,
-			AgentConfig: agentConf,
-		}
+		vmFinder := &actions.VMFinder{KubeConfig: kubeConf}
 		result, err = cpi.Dispatch(&req, vmFinder.HasVM)
 
 	case "reboot_vm":

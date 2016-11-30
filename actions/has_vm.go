@@ -4,18 +4,23 @@ import (
 	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
 	"k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/labels"
 )
 
 type VMFinder struct {
-	KubeConfig  config.Kubernetes
-	AgentConfig config.Agent
+	KubeConfig config.Kubernetes
 }
 
 func (f *VMFinder) HasVM(vmcid cpi.VMCID) (bool, error) {
+	_, pod, err := f.FindVM(vmcid)
+	return pod != nil, err
+}
+
+func (f *VMFinder) FindVM(vmcid cpi.VMCID) (string, *v1.Pod, error) {
 	agentSelector, err := labels.Parse("bosh.cloudfoundry.org/agent-id=" + string(vmcid))
 	if err != nil {
-		return false, err
+		return "", nil, err
 	}
 
 	contexts := []string{f.KubeConfig.DefaultContext()}
@@ -41,9 +46,9 @@ func (f *VMFinder) HasVM(vmcid cpi.VMCID) (bool, error) {
 		}
 
 		if len(podList.Items) > 0 {
-			return true, nil
+			return context, &podList.Items[0], nil
 		}
 	}
 
-	return false, errs[0]
+	return "", nil, errs[0]
 }
