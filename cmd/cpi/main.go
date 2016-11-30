@@ -86,7 +86,11 @@ func main() {
 		result, err = cpi.Dispatch(&req, DeleteVM)
 
 	case "has_vm":
-		result, err = cpi.Dispatch(&req, HasVM)
+		vmFinder := &actions.VMFinder{
+			KubeConfig:  kubeConf,
+			AgentConfig: agentConf,
+		}
+		result, err = cpi.Dispatch(&req, vmFinder.HasVM)
 
 	case "reboot_vm":
 		result, err = cpi.Dispatch(&req, RebootVM)
@@ -176,10 +180,6 @@ func GetDisks(vmcid cpi.VMCID) ([]cpi.DiskCID, error) {
 
 func DeleteVM(vmcid cpi.VMCID) error {
 	return nil
-}
-
-func HasVM(vmcid cpi.VMCID) (bool, error) {
-	return false, nil
 }
 
 func SetVMMetadata(vmcid cpi.VMCID, metadata map[string]string) error {

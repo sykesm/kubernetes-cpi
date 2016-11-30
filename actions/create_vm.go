@@ -71,7 +71,7 @@ func (v *VMCreator) Create(
 		return "", err
 	}
 
-	return cpi.VMCID("foo"), nil
+	return cpi.VMCID(agentID), nil
 }
 
 func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env cpi.Environment) (*agent.Settings, error) {
