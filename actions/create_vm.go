@@ -185,6 +185,7 @@ func createPod(podClient core.PodInterface, agentID string, image string) (*v1.P
 			},
 		},
 		Spec: v1.PodSpec{
+			Hostname: agentID,
 			Containers: []v1.Container{{
 				Name:            "bosh-job",
 				Image:           image,
