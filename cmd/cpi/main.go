@@ -27,8 +27,8 @@ func main() {
 	}
 	defer kubeConfigFile.Close()
 
-	var conf config.Config
-	err = json.NewDecoder(kubeConfigFile).Decode(&conf)
+	var kubeConf config.Kubernetes
+	err = json.NewDecoder(kubeConfigFile).Decode(&kubeConf)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +58,7 @@ func main() {
 
 	// VM management
 	case "create_vm":
-		vmCreator := &actions.VMCreator{Config: conf}
+		vmCreator := &actions.VMCreator{KubeConfig: kubeConf}
 		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
 	case "delete_vm":

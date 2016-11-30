@@ -15,7 +15,7 @@ import (
 )
 
 type VMCreator struct {
-	Config config.Config
+	KubeConfig config.Kubernetes
 }
 
 type VMCloudProperties struct {
@@ -32,15 +32,15 @@ func (v *VMCreator) Create(
 	env cpi.Environment,
 ) (cpi.VMCID, error) {
 	if len(cloudProps.Context) == 0 {
-		cloudProps.Context = v.Config.Context()
+		cloudProps.Context = v.KubeConfig.Context()
 	}
 
 	if len(cloudProps.Namespace) == 0 {
-		cloudProps.Namespace = v.Config.Namespace()
+		cloudProps.Namespace = v.KubeConfig.Namespace()
 	}
 
 	// create the client set
-	clientSet, err := v.Config.NewClient(cloudProps.Context)
+	clientSet, err := v.KubeConfig.NewClient(cloudProps.Context)
 	if err != nil {
 		return "", err
 	}

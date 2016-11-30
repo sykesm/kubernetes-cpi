@@ -14,9 +14,9 @@ import (
 	"github.com/sykesm/kubernetes-cpi/config"
 )
 
-var _ = Describe("Config", func() {
+var _ = Describe("Kubernetes Config", func() {
 	var configData []byte
-	var conf config.Config
+	var kubeConf config.Kubernetes
 
 	BeforeEach(func() {
 		configData = []byte(`{
@@ -36,77 +36,75 @@ var _ = Describe("Config", func() {
 			}
 		}`)
 
-		err := json.Unmarshal([]byte(configData), &conf)
+		err := json.Unmarshal([]byte(configData), &kubeConf)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("deserializes the config file", func() {
-		Expect(conf.Clusters).To(HaveLen(2))
-		Expect(conf.Clusters["bosh"]).To(Equal(&config.Cluster{
+		Expect(kubeConf.Clusters).To(HaveLen(2))
+		Expect(kubeConf.Clusters["bosh"]).To(Equal(&config.Cluster{
 			Server:                "https://192.168.64.17:8443",
 			InsecureSkipTLSVerify: true,
 		}))
-		Expect(conf.Clusters["minikube"]).To(Equal(&config.Cluster{
+		Expect(kubeConf.Clusters["minikube"]).To(Equal(&config.Cluster{
 			Server: "https://192.168.64.17:8443",
 			CertificateAuthorityData: "certificate-authority-data",
 		}))
 
-		Expect(conf.Contexts).To(HaveLen(3))
-		Expect(conf.Contexts["bosh"]).To(Equal(&config.Context{
+		Expect(kubeConf.Contexts).To(HaveLen(3))
+		Expect(kubeConf.Contexts["bosh"]).To(Equal(&config.Context{
 			Cluster:   "bosh",
 			AuthInfo:  "bosh",
 			Namespace: "bosh",
 		}))
-		Expect(conf.Contexts["minikube"]).To(Equal(&config.Context{
+		Expect(kubeConf.Contexts["minikube"]).To(Equal(&config.Context{
 			Cluster:   "minikube",
 			AuthInfo:  "minikube",
 			Namespace: "minikube",
 		}))
-		Expect(conf.Contexts["no-namespace"]).To(Equal(&config.Context{
+		Expect(kubeConf.Contexts["no-namespace"]).To(Equal(&config.Context{
 			Cluster:  "bosh",
 			AuthInfo: "minikube",
 		}))
 
-		Expect(conf.AuthInfos).To(HaveLen(2))
-		Expect(conf.AuthInfos["bosh"]).To(Equal(&config.AuthInfo{
+		Expect(kubeConf.AuthInfos).To(HaveLen(2))
+		Expect(kubeConf.AuthInfos["bosh"]).To(Equal(&config.AuthInfo{
 			Username: "user",
 			Password: "password",
 		}))
-		Expect(conf.AuthInfos["minikube"]).To(Equal(&config.AuthInfo{
+		Expect(kubeConf.AuthInfos["minikube"]).To(Equal(&config.AuthInfo{
 			ClientCertificateData: "client-certificate-data",
 			ClientKeyData:         "client-key-data",
 		}))
 
-		Expect(conf.CurrentContext).To(Equal("minikube"))
+		Expect(kubeConf.CurrentContext).To(Equal("minikube"))
 	})
 
 	Describe("Context", func() {
 		It("returns the name of the current context", func() {
-			Expect(conf.Context()).To(Equal("minikube"))
+			Expect(kubeConf.Context()).To(Equal("minikube"))
 		})
 	})
 
 	Describe("Namespace", func() {
 		It("returns the namespace from the current context", func() {
-			Expect(conf.Namespace()).To(Equal("minikube"))
+			Expect(kubeConf.Namespace()).To(Equal("minikube"))
 		})
 
 		Context("when the current context is missing a namespace", func() {
 			BeforeEach(func() {
-				conf.CurrentContext = "no-namespace"
+				kubeConf.CurrentContext = "no-namespace"
 			})
 
 			It("uses 'default' as the namespace", func() {
-				Expect(conf.Namespace()).To(Equal("default"))
+				Expect(kubeConf.Namespace()).To(Equal("default"))
 			})
 		})
 	})
 
 	Describe("ClientConfig", func() {
-		var conf config.Config
-
 		BeforeEach(func() {
-			conf = config.Config{
+			kubeConf = config.Kubernetes{
 				Clusters: map[string]*config.Cluster{
 					"cluster1": &config.Cluster{Server: "server1"},
 					"cluster2": &config.Cluster{Server: "server2", CertificateAuthorityData: "certificate-authority-data-2"},
@@ -133,7 +131,7 @@ var _ = Describe("Config", func() {
 		})
 
 		It("returns an api client config", func() {
-			cc := conf.ClientConfig()
+			cc := kubeConf.ClientConfig()
 			Expect(cc).To(Equal(&clientcmdapi.Config{
 				Clusters: map[string]*clientcmdapi.Cluster{
 					"cluster1": &clientcmdapi.Cluster{
@@ -185,16 +183,16 @@ var _ = Describe("Config", func() {
 
 	Describe("NonInteractiveClientConfig", func() {
 		It("wraps the result of ClientConfig", func() {
-			cc := conf.NonInteractiveClientConfig("bosh")
+			cc := kubeConf.NonInteractiveClientConfig("bosh")
 			rawConfig, err := cc.RawConfig()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(rawConfig).To(Equal(*conf.ClientConfig()))
+			Expect(rawConfig).To(Equal(*kubeConf.ClientConfig()))
 		})
 
 		It("is associated with the requested context", func() {
-			Expect(conf.Contexts[conf.CurrentContext].Namespace).NotTo(Equal("bosh"))
+			Expect(kubeConf.Contexts[kubeConf.CurrentContext].Namespace).NotTo(Equal("bosh"))
 
-			ns, override, err := conf.NonInteractiveClientConfig("bosh").Namespace()
+			ns, override, err := kubeConf.NonInteractiveClientConfig("bosh").Namespace()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ns).To(Equal("bosh"))
 			Expect(override).To(BeFalse())
@@ -202,9 +200,9 @@ var _ = Describe("Config", func() {
 
 		Context("when the requested context is empty", func() {
 			It("is uses the default context", func() {
-				Expect(conf.Contexts[conf.CurrentContext].Namespace).NotTo(Equal("bosh"))
+				Expect(kubeConf.Contexts[kubeConf.CurrentContext].Namespace).NotTo(Equal("bosh"))
 
-				ns, override, err := conf.NonInteractiveClientConfig("").Namespace()
+				ns, override, err := kubeConf.NonInteractiveClientConfig("").Namespace()
 				Expect(err).NotTo(HaveOccurred())
 				Expect(ns).To(Equal("minikube"))
 				Expect(override).To(BeFalse())
@@ -217,8 +215,8 @@ var _ = Describe("Config", func() {
 
 		BeforeEach(func() {
 			server = ghttp.NewTLSServer()
-			conf.Clusters["bosh"].Server = server.URL()
-			conf.Clusters["bosh"].InsecureSkipTLSVerify = true
+			kubeConf.Clusters["bosh"].Server = server.URL()
+			kubeConf.Clusters["bosh"].InsecureSkipTLSVerify = true
 
 			server.AppendHandlers(ghttp.CombineHandlers(
 				ghttp.VerifyRequest("GET", "/api/v1/namespaces/namespace/pods/podname"),
@@ -231,7 +229,7 @@ var _ = Describe("Config", func() {
 		})
 
 		It("creates a kubernetes client", func() {
-			intf, err := conf.NewClient("bosh")
+			intf, err := kubeConf.NewClient("bosh")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(intf).NotTo(BeNil())
 

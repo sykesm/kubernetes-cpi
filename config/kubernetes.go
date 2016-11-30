@@ -26,54 +26,54 @@ type Context struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-type Config struct {
+type Kubernetes struct {
 	Clusters       map[string]*Cluster  `json:"clusters"`
 	AuthInfos      map[string]*AuthInfo `json:"users"`
 	Contexts       map[string]*Context  `json:"contexts"`
 	CurrentContext string               `json:"current_context"`
 }
 
-func (c Config) NewClient(context string) (kubernetes.Interface, error) {
-	rc, err := c.NonInteractiveClientConfig(context).ClientConfig()
+func (k Kubernetes) NewClient(context string) (kubernetes.Interface, error) {
+	rc, err := k.NonInteractiveClientConfig(context).ClientConfig()
 	if err != nil {
 		return nil, err
 	}
 	return kubernetes.NewForConfig(rc)
 }
 
-func (c Config) Context() string {
-	return c.CurrentContext
+func (k Kubernetes) Context() string {
+	return k.CurrentContext
 }
 
-func (c Config) Namespace() string {
+func (k Kubernetes) Namespace() string {
 	ns := "default"
-	if dc := c.Contexts[c.CurrentContext]; dc != nil && len(dc.Namespace) != 0 {
+	if dc := k.Contexts[k.CurrentContext]; dc != nil && len(dc.Namespace) != 0 {
 		ns = dc.Namespace
 	}
 	return ns
 }
 
-func (c Config) ClientConfig() *clientcmdapi.Config {
+func (k Kubernetes) ClientConfig() *clientcmdapi.Config {
 	cc := clientcmdapi.NewConfig()
-	for k, v := range c.Clusters {
+	for k, v := range k.Clusters {
 		cc.Clusters[k] = v.api()
 	}
-	for k, v := range c.AuthInfos {
+	for k, v := range k.AuthInfos {
 		cc.AuthInfos[k] = v.api()
 	}
-	for k, v := range c.Contexts {
+	for k, v := range k.Contexts {
 		cc.Contexts[k] = v.api()
 	}
-	cc.CurrentContext = c.CurrentContext
+	cc.CurrentContext = k.CurrentContext
 	cc.Preferences = *clientcmdapi.NewPreferences()
 	return cc
 }
 
-func (c Config) NonInteractiveClientConfig(context string) clientcmd.ClientConfig {
+func (k Kubernetes) NonInteractiveClientConfig(context string) clientcmd.ClientConfig {
 	if len(context) == 0 {
-		context = c.CurrentContext
+		context = k.CurrentContext
 	}
-	return clientcmd.NewNonInteractiveClientConfig(*c.ClientConfig(), context, &clientcmd.ConfigOverrides{}, &clientcmd.ClientConfigLoadingRules{})
+	return clientcmd.NewNonInteractiveClientConfig(*k.ClientConfig(), context, &clientcmd.ConfigOverrides{}, &clientcmd.ClientConfigLoadingRules{})
 }
 
 func (a *AuthInfo) api() *clientcmdapi.AuthInfo {
