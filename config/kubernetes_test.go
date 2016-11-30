@@ -80,24 +80,21 @@ var _ = Describe("Kubernetes Config", func() {
 		Expect(kubeConf.CurrentContext).To(Equal("minikube"))
 	})
 
-	Describe("Context", func() {
+	Describe("DefaultContext", func() {
 		It("returns the name of the current context", func() {
-			Expect(kubeConf.Context()).To(Equal("minikube"))
+			Expect(kubeConf.DefaultContext()).To(Equal("minikube"))
 		})
 	})
 
 	Describe("Namespace", func() {
-		It("returns the namespace from the current context", func() {
-			Expect(kubeConf.Namespace()).To(Equal("minikube"))
+		It("returns the namespace from the specified context", func() {
+			Expect(kubeConf.Namespace("minikube")).To(Equal("minikube"))
+			Expect(kubeConf.Namespace("bosh")).To(Equal("bosh"))
 		})
 
 		Context("when the current context is missing a namespace", func() {
-			BeforeEach(func() {
-				kubeConf.CurrentContext = "no-namespace"
-			})
-
 			It("uses 'default' as the namespace", func() {
-				Expect(kubeConf.Namespace()).To(Equal("default"))
+				Expect(kubeConf.Namespace("no-namespace")).To(Equal("default"))
 			})
 		})
 	})

@@ -20,8 +20,7 @@ type VMCreator struct {
 }
 
 type VMCloudProperties struct {
-	Context   string `json:"context"`
-	Namespace string `json:"namespace"`
+	Context string `json:"context"`
 }
 
 func (v *VMCreator) Create(
@@ -33,11 +32,7 @@ func (v *VMCreator) Create(
 	env cpi.Environment,
 ) (cpi.VMCID, error) {
 	if len(cloudProps.Context) == 0 {
-		cloudProps.Context = v.KubeConfig.Context()
-	}
-
-	if len(cloudProps.Namespace) == 0 {
-		cloudProps.Namespace = v.KubeConfig.Namespace()
+		cloudProps.Context = v.KubeConfig.DefaultContext()
 	}
 
 	// create the client set
@@ -47,7 +42,8 @@ func (v *VMCreator) Create(
 	}
 
 	// create the target namespace if it doesn't already exist
-	err = createNamespace(clientSet.Core(), cloudProps.Namespace)
+	namespace := v.KubeConfig.Namespace(cloudProps.Context)
+	err = createNamespace(clientSet.Core(), namespace)
 	if err != nil {
 		return "", err
 	}
@@ -58,19 +54,19 @@ func (v *VMCreator) Create(
 	}
 
 	// create the config map
-	_, err = createConfigMap(clientSet.Core().ConfigMaps(cloudProps.Namespace), agentID, instanceSettings)
+	_, err = createConfigMap(clientSet.Core().ConfigMaps(namespace), agentID, instanceSettings)
 	if err != nil {
 		return "", err
 	}
 
 	// create the service
-	_, err = createService(clientSet.Core().Services(cloudProps.Namespace), agentID, "")
+	_, err = createService(clientSet.Core().Services(namespace), agentID, "")
 	if err != nil {
 		return "", err
 	}
 
 	// create the pod
-	_, err = createPod(clientSet.Core().Pods(cloudProps.Namespace), agentID, string(stemcellCID))
+	_, err = createPod(clientSet.Core().Pods(namespace), agentID, string(stemcellCID))
 	if err != nil {
 		return "", err
 	}

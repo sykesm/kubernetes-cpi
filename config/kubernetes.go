@@ -23,7 +23,7 @@ type AuthInfo struct {
 type Context struct {
 	Cluster   string `json:"cluster"`
 	AuthInfo  string `json:"user"`
-	Namespace string `json:"namespace,omitempty"`
+	Namespace string `json:"namespace"`
 }
 
 type Kubernetes struct {
@@ -41,14 +41,14 @@ func (k Kubernetes) NewClient(context string) (kubernetes.Interface, error) {
 	return kubernetes.NewForConfig(rc)
 }
 
-func (k Kubernetes) Context() string {
+func (k Kubernetes) DefaultContext() string {
 	return k.CurrentContext
 }
 
-func (k Kubernetes) Namespace() string {
+func (k Kubernetes) Namespace(contextName string) string {
 	ns := "default"
-	if dc := k.Contexts[k.CurrentContext]; dc != nil && len(dc.Namespace) != 0 {
-		ns = dc.Namespace
+	if ctx := k.Contexts[contextName]; ctx != nil && len(ctx.Namespace) != 0 {
+		ns = ctx.Namespace
 	}
 	return ns
 }
