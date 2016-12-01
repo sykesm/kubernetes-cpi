@@ -2,10 +2,12 @@ package actions
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/sykesm/kubernetes-cpi/agent"
 	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
+	"github.com/sykesm/kubernetes-cpi/kubecluster"
 
 	core "k8s.io/client-go/1.4/kubernetes/typed/core/v1"
 	kubeerrors "k8s.io/client-go/1.4/pkg/api/errors"
@@ -15,8 +17,8 @@ import (
 )
 
 type VMCreator struct {
-	KubeConfig  config.Kubernetes
-	AgentConfig config.Agent
+	AgentConfig *config.Agent
+	Provider    kubecluster.Provider
 }
 
 type VMCloudProperties struct {
@@ -31,19 +33,15 @@ func (v *VMCreator) Create(
 	diskCIDs []cpi.DiskCID,
 	env cpi.Environment,
 ) (cpi.VMCID, error) {
-	if len(cloudProps.Context) == 0 {
-		cloudProps.Context = v.KubeConfig.DefaultContext()
-	}
 
 	// create the client set
-	clientSet, err := v.KubeConfig.NewClient(cloudProps.Context)
+	client, err := v.Provider.New(cloudProps.Context)
 	if err != nil {
 		return "", err
 	}
 
 	// create the target namespace if it doesn't already exist
-	namespace := v.KubeConfig.Namespace(cloudProps.Context)
-	err = createNamespace(clientSet.Core(), namespace)
+	err = createNamespace(client.Core(), client.Namespace())
 	if err != nil {
 		return "", err
 	}
@@ -54,24 +52,33 @@ func (v *VMCreator) Create(
 	}
 
 	// create the config map
-	_, err = createConfigMap(clientSet.Core().ConfigMaps(namespace), agentID, instanceSettings)
+	_, err = createConfigMap(client.ConfigMaps(), agentID, instanceSettings)
 	if err != nil {
 		return "", err
 	}
 
 	// create the service
-	_, err = createService(clientSet.Core().Services(namespace), agentID, "")
+	_, err = createService(client.Services(), agentID, "")
 	if err != nil {
 		return "", err
 	}
 
 	// create the pod
-	_, err = createPod(clientSet.Core().Pods(namespace), agentID, string(stemcellCID))
+	_, err = createPod(client.Pods(), agentID, string(stemcellCID))
 	if err != nil {
 		return "", err
 	}
 
-	return cpi.VMCID(agentID), nil
+	return NewVMCID(client.Context(), agentID), nil
+}
+
+func NewVMCID(context, agentID string) cpi.VMCID {
+	return cpi.VMCID(context + ":" + agentID)
+}
+
+func ParseVMCID(vmcid cpi.VMCID) (context, agentID string) {
+	parts := strings.SplitN(string(vmcid), ":", 2)
+	return parts[0], parts[1]
 }
 
 func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env cpi.Environment) (*agent.Settings, error) {

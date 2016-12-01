@@ -1,10 +1,6 @@
 package config
 
-import (
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/1.4/tools/clientcmd/api"
-)
+import clientcmdapi "k8s.io/client-go/1.4/tools/clientcmd/api"
 
 type Cluster struct {
 	Server                   string `json:"server"`
@@ -33,28 +29,9 @@ type Kubernetes struct {
 	CurrentContext string               `json:"current_context"`
 }
 
-func (k Kubernetes) NewClient(context string) (kubernetes.Interface, error) {
-	rc, err := k.NonInteractiveClientConfig(context).ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-	return kubernetes.NewForConfig(rc)
-}
-
-func (k Kubernetes) DefaultContext() string {
-	return k.CurrentContext
-}
-
-func (k Kubernetes) Namespace(contextName string) string {
-	ns := "default"
-	if ctx := k.Contexts[contextName]; ctx != nil && len(ctx.Namespace) != 0 {
-		ns = ctx.Namespace
-	}
-	return ns
-}
-
-func (k Kubernetes) ClientConfig() *clientcmdapi.Config {
+func (k Kubernetes) ClientConfig() clientcmdapi.Config {
 	cc := clientcmdapi.NewConfig()
+	cc.CurrentContext = k.CurrentContext
 	for k, v := range k.Clusters {
 		cc.Clusters[k] = v.api()
 	}
@@ -64,16 +41,8 @@ func (k Kubernetes) ClientConfig() *clientcmdapi.Config {
 	for k, v := range k.Contexts {
 		cc.Contexts[k] = v.api()
 	}
-	cc.CurrentContext = k.CurrentContext
 	cc.Preferences = *clientcmdapi.NewPreferences()
-	return cc
-}
-
-func (k Kubernetes) NonInteractiveClientConfig(context string) clientcmd.ClientConfig {
-	if len(context) == 0 {
-		context = k.CurrentContext
-	}
-	return clientcmd.NewNonInteractiveClientConfig(*k.ClientConfig(), context, &clientcmd.ConfigOverrides{}, &clientcmd.ClientConfigLoadingRules{})
+	return *cc
 }
 
 func (a *AuthInfo) api() *clientcmdapi.AuthInfo {

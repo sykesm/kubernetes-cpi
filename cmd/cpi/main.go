@@ -10,6 +10,7 @@ import (
 	"github.com/sykesm/kubernetes-cpi/actions"
 	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
+	"github.com/sykesm/kubernetes-cpi/kubecluster"
 )
 
 var agentConfigFlag = flag.String(
@@ -21,32 +22,18 @@ var agentConfigFlag = flag.String(
 var kubeConfigFlag = flag.String(
 	"kubeConfig",
 	"",
-	"Path to the serialized configuration file",
+	"Path to the serialized kubernetes configuration file",
 )
 
 func main() {
 	flag.Parse()
 
-	kubeConfigFile, err := os.Open(*kubeConfigFlag)
-	if err != nil {
-		panic(err)
-	}
-	defer kubeConfigFile.Close()
-
-	var kubeConf config.Kubernetes
-	err = json.NewDecoder(kubeConfigFile).Decode(&kubeConf)
+	kubeConf, err := loadKubeConfig(*kubeConfigFlag)
 	if err != nil {
 		panic(err)
 	}
 
-	agentConfigFile, err := os.Open(*agentConfigFlag)
-	if err != nil {
-		panic(err)
-	}
-	defer agentConfigFile.Close()
-
-	var agentConf config.Agent
-	err = json.NewDecoder(agentConfigFile).Decode(&agentConf)
+	agentConf, err := loadAgentConfig(*agentConfigFlag)
 	if err != nil {
 		panic(err)
 	}
@@ -62,7 +49,9 @@ func main() {
 		panic(err)
 	}
 
-	encoder := json.NewEncoder(os.Stdout)
+	provider := kubecluster.Provider{
+		Config: kubeConf.ClientConfig(),
+	}
 
 	var result *cpi.Response
 	switch req.Method {
@@ -76,14 +65,17 @@ func main() {
 
 	// VM management
 	case "create_vm":
-		vmCreator := &actions.VMCreator{KubeConfig: kubeConf, AgentConfig: agentConf}
+		vmCreator := &actions.VMCreator{
+			AgentConfig: agentConf,
+			Provider:    provider,
+		}
 		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
 	case "delete_vm":
 		result, err = cpi.Dispatch(&req, DeleteVM)
 
 	case "has_vm":
-		vmFinder := &actions.VMFinder{KubeConfig: kubeConf}
+		vmFinder := &actions.VMFinder{Provider: provider}
 		result, err = cpi.Dispatch(&req, vmFinder.HasVM)
 
 	case "reboot_vm":
@@ -128,10 +120,42 @@ func main() {
 		panic(err)
 	}
 
-	err = encoder.Encode(result)
+	err = json.NewEncoder(os.Stdout).Encode(result)
 	if err != nil {
 		panic(err)
 	}
+}
+
+func loadKubeConfig(path string) (*config.Kubernetes, error) {
+	kubeConfigFile, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer kubeConfigFile.Close()
+
+	var kubeConf config.Kubernetes
+	err = json.NewDecoder(kubeConfigFile).Decode(&kubeConf)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kubeConf, nil
+}
+
+func loadAgentConfig(path string) (*config.Agent, error) {
+	agentConfigFile, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer agentConfigFile.Close()
+
+	var agentConf config.Agent
+	err = json.NewDecoder(agentConfigFile).Decode(&agentConf)
+	if err != nil {
+		return nil, err
+	}
+
+	return &agentConf, nil
 }
 
 type StemcellCloudProperties struct {

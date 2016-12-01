@@ -1,4 +1,4 @@
-package main_test
+package kubecluster_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCpi(t *testing.T) {
+func TestKubecluster(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "CPI Main Command Suite")
+	RunSpecs(t, "Kubecluster Suite")
 }

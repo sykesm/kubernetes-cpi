@@ -2,15 +2,12 @@ package config_test
 
 import (
 	"encoding/json"
-	"net/http"
 
-	"k8s.io/client-go/1.4/pkg/api/v1"
 	"k8s.io/client-go/1.4/pkg/runtime"
 	clientcmdapi "k8s.io/client-go/1.4/tools/clientcmd/api"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/ghttp"
 	"github.com/sykesm/kubernetes-cpi/config"
 )
 
@@ -80,25 +77,6 @@ var _ = Describe("Kubernetes Config", func() {
 		Expect(kubeConf.CurrentContext).To(Equal("minikube"))
 	})
 
-	Describe("DefaultContext", func() {
-		It("returns the name of the current context", func() {
-			Expect(kubeConf.DefaultContext()).To(Equal("minikube"))
-		})
-	})
-
-	Describe("Namespace", func() {
-		It("returns the namespace from the specified context", func() {
-			Expect(kubeConf.Namespace("minikube")).To(Equal("minikube"))
-			Expect(kubeConf.Namespace("bosh")).To(Equal("bosh"))
-		})
-
-		Context("when the current context is missing a namespace", func() {
-			It("uses 'default' as the namespace", func() {
-				Expect(kubeConf.Namespace("no-namespace")).To(Equal("default"))
-			})
-		})
-	})
-
 	Describe("ClientConfig", func() {
 		BeforeEach(func() {
 			kubeConf = config.Kubernetes{
@@ -129,7 +107,7 @@ var _ = Describe("Kubernetes Config", func() {
 
 		It("returns an api client config", func() {
 			cc := kubeConf.ClientConfig()
-			Expect(cc).To(Equal(&clientcmdapi.Config{
+			Expect(cc).To(Equal(clientcmdapi.Config{
 				Clusters: map[string]*clientcmdapi.Cluster{
 					"cluster1": &clientcmdapi.Cluster{
 						Server:     "server1",
@@ -175,67 +153,6 @@ var _ = Describe("Kubernetes Config", func() {
 				Extensions:     map[string]runtime.Object{},
 				Preferences:    *clientcmdapi.NewPreferences(),
 			}))
-		})
-	})
-
-	Describe("NonInteractiveClientConfig", func() {
-		It("wraps the result of ClientConfig", func() {
-			cc := kubeConf.NonInteractiveClientConfig("bosh")
-			rawConfig, err := cc.RawConfig()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(rawConfig).To(Equal(*kubeConf.ClientConfig()))
-		})
-
-		It("is associated with the requested context", func() {
-			Expect(kubeConf.Contexts[kubeConf.CurrentContext].Namespace).NotTo(Equal("bosh"))
-
-			ns, override, err := kubeConf.NonInteractiveClientConfig("bosh").Namespace()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ns).To(Equal("bosh"))
-			Expect(override).To(BeFalse())
-		})
-
-		Context("when the requested context is empty", func() {
-			It("is uses the default context", func() {
-				Expect(kubeConf.Contexts[kubeConf.CurrentContext].Namespace).NotTo(Equal("bosh"))
-
-				ns, override, err := kubeConf.NonInteractiveClientConfig("").Namespace()
-				Expect(err).NotTo(HaveOccurred())
-				Expect(ns).To(Equal("minikube"))
-				Expect(override).To(BeFalse())
-			})
-		})
-	})
-
-	Describe("NewClient", func() {
-		var server *ghttp.Server
-
-		BeforeEach(func() {
-			server = ghttp.NewTLSServer()
-			kubeConf.Clusters["bosh"].Server = server.URL()
-			kubeConf.Clusters["bosh"].InsecureSkipTLSVerify = true
-
-			server.AppendHandlers(ghttp.CombineHandlers(
-				ghttp.VerifyRequest("GET", "/api/v1/namespaces/namespace/pods/podname"),
-				ghttp.VerifyBasicAuth("user", "password"),
-				ghttp.RespondWithJSONEncoded(
-					http.StatusOK,
-					v1.Pod{ObjectMeta: v1.ObjectMeta{Name: "podname", Namespace: "namespace"}},
-				),
-			))
-		})
-
-		It("creates a kubernetes client", func() {
-			intf, err := kubeConf.NewClient("bosh")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(intf).NotTo(BeNil())
-
-			pod, err := intf.Core().Pods("namespace").Get("podname")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(server.ReceivedRequests()).To(HaveLen(1))
-
-			Expect(pod.Name).To(Equal("podname"))
-			Expect(pod.Namespace).To(Equal("namespace"))
 		})
 	})
 })
