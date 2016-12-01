@@ -8,6 +8,7 @@ import (
 
 const DefaultContext = ""
 
+//go:generate counterfeiter -o fakes/client_provider.go --fake-name ClientProvider . ClientProvider
 type ClientProvider interface {
 	New(context string) (Client, error)
 }

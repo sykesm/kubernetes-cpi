@@ -17,8 +17,8 @@ import (
 )
 
 type VMCreator struct {
-	AgentConfig *config.Agent
-	Provider    kubecluster.Provider
+	AgentConfig    *config.Agent
+	ClientProvider kubecluster.ClientProvider
 }
 
 type VMCloudProperties struct {
@@ -35,7 +35,7 @@ func (v *VMCreator) Create(
 ) (cpi.VMCID, error) {
 
 	// create the client set
-	client, err := v.Provider.New(cloudProps.Context)
+	client, err := v.ClientProvider.New(cloudProps.Context)
 	if err != nil {
 		return "", err
 	}

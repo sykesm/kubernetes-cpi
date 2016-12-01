@@ -49,7 +49,7 @@ func main() {
 		panic(err)
 	}
 
-	provider := kubecluster.Provider{
+	provider := &kubecluster.Provider{
 		Config: kubeConf.ClientConfig(),
 	}
 
@@ -66,8 +66,8 @@ func main() {
 	// VM management
 	case "create_vm":
 		vmCreator := &actions.VMCreator{
-			AgentConfig: agentConf,
-			Provider:    provider,
+			AgentConfig:    agentConf,
+			ClientProvider: provider,
 		}
 		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
@@ -75,7 +75,7 @@ func main() {
 		result, err = cpi.Dispatch(&req, DeleteVM)
 
 	case "has_vm":
-		vmFinder := &actions.VMFinder{Provider: provider}
+		vmFinder := &actions.VMFinder{ClientProvider: provider}
 		result, err = cpi.Dispatch(&req, vmFinder.HasVM)
 
 	case "reboot_vm":
