@@ -46,25 +46,29 @@ func (v *VMCreator) Create(
 		return "", err
 	}
 
+	// NOTE: This is a workaround for the fake Clientset. This should be
+	// removed once https://github.com/kubernetes/client-go/issues/48 is
+	// resolved.
+	ns := client.Namespace()
 	instanceSettings, err := v.InstanceSettings(agentID, networks, env)
 	if err != nil {
 		return "", err
 	}
 
 	// create the config map
-	_, err = createConfigMap(client.ConfigMaps(), agentID, instanceSettings)
+	_, err = createConfigMap(client.ConfigMaps(), ns, agentID, instanceSettings)
 	if err != nil {
 		return "", err
 	}
 
 	// create the service
-	_, err = createService(client.Services(), agentID, "")
+	_, err = createService(client.Services(), ns, agentID)
 	if err != nil {
 		return "", err
 	}
 
 	// create the pod
-	_, err = createPod(client.Pods(), agentID, string(stemcellCID))
+	_, err = createPod(client.Pods(), ns, agentID, string(stemcellCID))
 	if err != nil {
 		return "", err
 	}
@@ -132,7 +136,7 @@ func createNamespace(coreClient core.CoreInterface, namespace string) error {
 	return err
 }
 
-func createConfigMap(configMapService core.ConfigMapInterface, agentID string, instanceSettings *agent.Settings) (*v1.ConfigMap, error) {
+func createConfigMap(configMapService core.ConfigMapInterface, ns, agentID string, instanceSettings *agent.Settings) (*v1.ConfigMap, error) {
 	instanceJSON, err := json.Marshal(instanceSettings)
 	if err != nil {
 		return nil, err
@@ -140,7 +144,8 @@ func createConfigMap(configMapService core.ConfigMapInterface, agentID string, i
 
 	return configMapService.Create(&v1.ConfigMap{
 		ObjectMeta: v1.ObjectMeta{
-			Name: "agent-" + agentID,
+			Name:      "agent-" + agentID,
+			Namespace: ns,
 			Labels: map[string]string{
 				"bosh.cloudfoundry.org/agent-id": agentID,
 			},
@@ -151,13 +156,14 @@ func createConfigMap(configMapService core.ConfigMapInterface, agentID string, i
 	})
 }
 
-func createService(serviceClient core.ServiceInterface, agentID string, vip string) (*v1.Service, error) {
+func createService(serviceClient core.ServiceInterface, ns, agentID string) (*v1.Service, error) {
 	// Need to provide a way to explicitly associate services.
 	// For the director, we will need 22 (ssh) and 25555 (director).
 	// During bosh-init, the agent will need to expose 6868.
 	return serviceClient.Create(&v1.Service{
 		ObjectMeta: v1.ObjectMeta{
-			Name: "agent-" + agentID,
+			Name:      "agent-" + agentID,
+			Namespace: ns,
 			Labels: map[string]string{
 				"bosh.cloudfoundry.org/agent-id": agentID,
 			},
@@ -168,7 +174,6 @@ func createService(serviceClient core.ServiceInterface, agentID string, vip stri
 				NodePort: 32068, // FIXME
 				Port:     6868,
 			}},
-			ClusterIP: vip,
 			Selector: map[string]string{
 				"bosh.cloudfoundry.org/agent-id": agentID,
 			},
@@ -176,7 +181,7 @@ func createService(serviceClient core.ServiceInterface, agentID string, vip stri
 	})
 }
 
-func createPod(podClient core.PodInterface, agentID string, image string) (*v1.Pod, error) {
+func createPod(podClient core.PodInterface, ns, agentID string, image string) (*v1.Pod, error) {
 	trueValue := true
 	rootUID := int64(0)
 
@@ -186,7 +191,8 @@ func createPod(podClient core.PodInterface, agentID string, image string) (*v1.P
 
 	return podClient.Create(&v1.Pod{
 		ObjectMeta: v1.ObjectMeta{
-			Name: "agent-" + agentID,
+			Name:      "agent-" + agentID,
+			Namespace: ns,
 			Labels: map[string]string{
 				"bosh.cloudfoundry.org/agent-id": agentID,
 			},

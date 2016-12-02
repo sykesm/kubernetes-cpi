@@ -13,11 +13,12 @@ import (
 	"k8s.io/client-go/1.4/testing"
 )
 
-var _ = Describe("HasVm", func() {
+var _ = Describe("HasVM", func() {
 	var (
-		vmFinder     *actions.VMFinder
-		fakeProvider *fakes.ClientProvider
 		fakeClient   *fakes.Client
+		fakeProvider *fakes.ClientProvider
+
+		vmFinder *actions.VMFinder
 	)
 
 	BeforeEach(func() {

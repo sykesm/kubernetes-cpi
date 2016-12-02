@@ -5,6 +5,7 @@ import (
 	"k8s.io/client-go/1.4/kubernetes/fake"
 	core "k8s.io/client-go/1.4/kubernetes/typed/core/v1"
 	"k8s.io/client-go/1.4/pkg/runtime"
+	"k8s.io/client-go/1.4/testing"
 )
 
 //go:generate counterfeiter -o client_context.go --fake-name ClientContext . clientContext
@@ -39,4 +40,14 @@ func (c *Client) Services() core.ServiceInterface {
 
 func (c *Client) ConfigMaps() core.ConfigMapInterface {
 	return c.Core().ConfigMaps(c.Namespace())
+}
+
+func (c *Client) MatchingActions(verb, resource string) []testing.Action {
+	result := []testing.Action{}
+	for _, action := range c.Actions() {
+		if action.Matches(verb, resource) {
+			result = append(result, action)
+		}
+	}
+	return result
 }
