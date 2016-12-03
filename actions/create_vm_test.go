@@ -153,13 +153,13 @@ var _ = Describe("CreateVM", func() {
 		Context("when the namespace create fails", func() {
 			BeforeEach(func() {
 				fakeClient.PrependReactor("create", "namespaces", func(action testing.Action) (bool, runtime.Object, error) {
-					return true, nil, errors.New("welp")
+					return true, nil, errors.New("namespace-welp")
 				})
 			})
 
 			It("returns an error", func() {
 				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
-				Expect(err).To(MatchError("welp"))
+				Expect(err).To(MatchError("namespace-welp"))
 				Expect(fakeClient.MatchingActions("create", "namespaces")).To(HaveLen(1))
 			})
 		})

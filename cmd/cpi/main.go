@@ -72,7 +72,8 @@ func main() {
 		result, err = cpi.Dispatch(&req, vmCreator.Create)
 
 	case "delete_vm":
-		result, err = cpi.Dispatch(&req, DeleteVM)
+		vmDeleter := &actions.VMDeleter{ClientProvider: provider}
+		result, err = cpi.Dispatch(&req, vmDeleter.Delete)
 
 	case "has_vm":
 		vmFinder := &actions.VMFinder{ClientProvider: provider}
@@ -194,10 +195,6 @@ func HasDisk(diskCID cpi.DiskCID) bool {
 
 func GetDisks(vmcid cpi.VMCID) ([]cpi.DiskCID, error) {
 	return []cpi.DiskCID{}, nil
-}
-
-func DeleteVM(vmcid cpi.VMCID) error {
-	return nil
 }
 
 func SetVMMetadata(vmcid cpi.VMCID, metadata map[string]string) error {
