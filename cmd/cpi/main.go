@@ -83,7 +83,8 @@ func main() {
 		result, err = cpi.Dispatch(&req, RebootVM)
 
 	case "set_vm_metadata":
-		result, err = cpi.Dispatch(&req, SetVMMetadata)
+		vmMetadataSetter := actions.VMMetadataSetter{ClientProvider: provider}
+		result, err = cpi.Dispatch(&req, vmMetadataSetter.SetVMMetadata)
 
 	case "configure_networks":
 		result, err = nil, &cpi.NotSupportedError{}
@@ -195,10 +196,6 @@ func HasDisk(diskCID cpi.DiskCID) bool {
 
 func GetDisks(vmcid cpi.VMCID) ([]cpi.DiskCID, error) {
 	return []cpi.DiskCID{}, nil
-}
-
-func SetVMMetadata(vmcid cpi.VMCID, metadata map[string]string) error {
-	return nil
 }
 
 func RebootVM(vmcid cpi.VMCID) error {

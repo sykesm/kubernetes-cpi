@@ -103,6 +103,17 @@ var _ = Describe("CreateVM", func() {
 			Expect(fakeProvider.NewArgsForCall(0)).To(Equal("bosh"))
 		})
 
+		Context("when getting the client fails", func() {
+			BeforeEach(func() {
+				fakeProvider.NewReturns(nil, errors.New("boom"))
+			})
+
+			It("gets a client for the appropriate context", func() {
+				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+				Expect(err).To(MatchError("boom"))
+			})
+		})
+
 		It("creates the target namespace", func() {
 			_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
 			Expect(err).NotTo(HaveOccurred())

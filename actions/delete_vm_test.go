@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/1.4/testing"
 )
 
-var _ = Describe("DeleteVm", func() {
+var _ = Describe("DeleteVM", func() {
 	var (
 		fakeClient   *fakes.Client
 		fakeProvider *fakes.ClientProvider
@@ -56,6 +56,17 @@ var _ = Describe("DeleteVm", func() {
 
 			Expect(fakeProvider.NewCallCount()).To(Equal(1))
 			Expect(fakeProvider.NewArgsForCall(0)).To(Equal("bosh"))
+		})
+
+		Context("when getting the client fails", func() {
+			BeforeEach(func() {
+				fakeProvider.NewReturns(nil, errors.New("boom"))
+			})
+
+			It("gets a client for the appropriate context", func() {
+				err := vmDeleter.Delete(vmcid)
+				Expect(err).To(MatchError("boom"))
+			})
 		})
 
 		It("deletes the pod", func() {
