@@ -8,6 +8,7 @@ import (
 	"k8s.io/client-go/1.4/pkg/api"
 	kubeerrors "k8s.io/client-go/1.4/pkg/api/errors"
 	"k8s.io/client-go/1.4/pkg/api/unversioned"
+	"k8s.io/client-go/1.4/pkg/labels"
 )
 
 type VMDeleter struct {
@@ -27,7 +28,7 @@ func (v *VMDeleter) Delete(vmcid cpi.VMCID) error {
 		return err
 	}
 
-	err = deleteService(client.Services(), agentID)
+	err = deleteServices(client.Services(), agentID)
 	if err != nil {
 		return err
 	}
@@ -50,18 +51,29 @@ func deleteConfigMap(configMapService core.ConfigMapInterface, agentID string) e
 	return err
 }
 
-func deleteService(serviceClient core.ServiceInterface, agentID string) error {
-	err := serviceClient.Delete("agent-"+agentID, &api.DeleteOptions{GracePeriodSeconds: int64Ptr(1)})
-	if statusError, ok := err.(*kubeerrors.StatusError); ok {
-		if statusError.Status().Reason == unversioned.StatusReasonNotFound {
-			return nil
+func deleteServices(serviceClient core.ServiceInterface, agentID string) error {
+	agentSelector, err := labels.Parse("bosh.cloudfoundry.org/agent-id=" + agentID)
+	if err != nil {
+		return err
+	}
+
+	serviceList, err := serviceClient.List(api.ListOptions{LabelSelector: agentSelector})
+	if err != nil {
+		return err
+	}
+
+	for _, service := range serviceList.Items {
+		err := serviceClient.Delete(service.Name, &api.DeleteOptions{GracePeriodSeconds: int64Ptr(0)})
+		if err != nil {
+			return err
 		}
 	}
-	return err
+
+	return nil
 }
 
 func deletePod(podClient core.PodInterface, agentID string) error {
-	err := podClient.Delete("agent-"+agentID, &api.DeleteOptions{GracePeriodSeconds: int64Ptr(1)})
+	err := podClient.Delete("agent-"+agentID, &api.DeleteOptions{GracePeriodSeconds: int64Ptr(0)})
 	if statusError, ok := err.(*kubeerrors.StatusError); ok {
 		if statusError.Status().Reason == unversioned.StatusReasonNotFound {
 			return nil

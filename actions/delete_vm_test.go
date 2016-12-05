@@ -10,6 +10,7 @@ import (
 	"github.com/sykesm/kubernetes-cpi/kubecluster/fakes"
 	"k8s.io/client-go/1.4/kubernetes/fake"
 	"k8s.io/client-go/1.4/pkg/api/v1"
+	"k8s.io/client-go/1.4/pkg/labels"
 	"k8s.io/client-go/1.4/pkg/runtime"
 	"k8s.io/client-go/1.4/testing"
 )
@@ -43,10 +44,21 @@ var _ = Describe("DeleteVM", func() {
 			agentID = "agent-id"
 			vmcid = actions.NewVMCID("bosh", agentID)
 
+			services := []v1.Service{
+				{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "agent-agent-id",
+						Namespace: "bosh-namespace",
+						Labels: map[string]string{
+							"bosh.cloudfoundry.org/agent-id": agentID,
+						},
+					},
+				},
+			}
 			fakeClient.Clientset = *fake.NewSimpleClientset(
 				&v1.Pod{ObjectMeta: v1.ObjectMeta{Name: "agent-agent-id", Namespace: "bosh-namespace"}},
-				&v1.Service{ObjectMeta: v1.ObjectMeta{Name: "agent-agent-id", Namespace: "bosh-namespace"}},
 				&v1.ConfigMap{ObjectMeta: v1.ObjectMeta{Name: "agent-agent-id", Namespace: "bosh-namespace"}},
+				&v1.ServiceList{Items: services},
 			)
 		})
 
@@ -80,11 +92,19 @@ var _ = Describe("DeleteVM", func() {
 			Expect(matches[0].(testing.DeleteAction).GetNamespace()).To(Equal("bosh-namespace"))
 		})
 
-		It("deletes the service", func() {
+		It("deletes services labeled with the agent ID", func() {
 			err := vmDeleter.Delete(vmcid)
 			Expect(err).NotTo(HaveOccurred())
 
-			matches := fakeClient.MatchingActions("delete", "services")
+			selector, err := labels.Parse("bosh.cloudfoundry.org/agent-id=" + agentID)
+			Expect(err).NotTo(HaveOccurred())
+
+			matches := fakeClient.MatchingActions("list", "services")
+			Expect(matches).To(HaveLen(1))
+			listAction := matches[0].(testing.ListAction)
+			Expect(listAction.GetListRestrictions().Labels).To(Equal(selector))
+
+			matches = fakeClient.MatchingActions("delete", "services")
 			Expect(matches).To(HaveLen(1))
 
 			Expect(matches[0].(testing.DeleteAction).GetName()).To(Equal("agent-" + agentID))
@@ -112,9 +132,10 @@ var _ = Describe("DeleteVM", func() {
 				err := vmDeleter.Delete(vmcid)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(fakeClient.Actions()).To(HaveLen(6))
+				Expect(fakeClient.Actions()).To(HaveLen(7))
 				Expect(fakeClient.MatchingActions("delete", "pods")).To(HaveLen(2))
-				Expect(fakeClient.MatchingActions("delete", "services")).To(HaveLen(2))
+				Expect(fakeClient.MatchingActions("list", "services")).To(HaveLen(2))
+				Expect(fakeClient.MatchingActions("delete", "services")).To(HaveLen(1))
 				Expect(fakeClient.MatchingActions("delete", "configmaps")).To(HaveLen(2))
 			})
 		})
@@ -144,6 +165,17 @@ var _ = Describe("DeleteVM", func() {
 				err := vmDeleter.Delete(vmcid)
 				Expect(err).To(MatchError("configmaps-welp"))
 				Expect(fakeClient.MatchingActions("delete", "configmaps")).To(HaveLen(1))
+			})
+		})
+
+		Context("when building the agent selector fails", func() {
+			BeforeEach(func() {
+				vmcid = actions.NewVMCID("bosh", "**invalid**")
+			})
+
+			It("returns an error", func() {
+				err := vmDeleter.Delete(vmcid)
+				Expect(err).To(MatchError(ContainSubstring("invalid label value")))
 			})
 		})
 
