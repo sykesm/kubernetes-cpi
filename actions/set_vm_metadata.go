@@ -2,11 +2,13 @@ package actions
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/sykesm/kubernetes-cpi/cpi"
 	"github.com/sykesm/kubernetes-cpi/kubecluster"
 	"k8s.io/client-go/1.4/pkg/api"
 	"k8s.io/client-go/1.4/pkg/util/strategicpatch"
+	"k8s.io/client-go/1.4/pkg/util/validation"
 )
 
 type VMMetadataSetter struct {
@@ -32,7 +34,10 @@ func (v *VMMetadataSetter) SetVMMetadata(vmcid cpi.VMCID, metadata map[string]st
 	}
 
 	for k, v := range metadata {
-		pod.ObjectMeta.Labels[k] = v
+		k = "bosh.cloudfoundry.org/" + strings.ToLower(k)
+		if len(validation.IsQualifiedName(k)) == 0 && len(validation.IsValidLabelValue(v)) == 0 {
+			pod.ObjectMeta.Labels[k] = v
+		}
 	}
 
 	new, err := json.Marshal(pod)

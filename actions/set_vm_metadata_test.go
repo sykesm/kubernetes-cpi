@@ -40,10 +40,12 @@ var _ = Describe("SetVMMetadata", func() {
 		BeforeEach(func() {
 			vmcid = actions.NewVMCID("bosh", "agent-id")
 			metadata = map[string]string{
-				"bosh.cloudfoundry.org/deployment": "kube-test-bosh",
-				"bosh.cloudfoundry.org/director":   "bosh-init",
-				"bosh.cloudfoundry.org/job":        "bosh",
-				"bosh.cloudfoundry.org/index":      "0",
+				"deployment":       "kube-test-bosh",
+				"director":         "bosh-init",
+				"job":              "bosh",
+				"index":            "0",
+				"invalid key name": "good-value",
+				"valid-key-name":   "***invalid value***",
 			}
 
 			fakeClient.Clientset = *fake.NewSimpleClientset(
@@ -100,7 +102,7 @@ var _ = Describe("SetVMMetadata", func() {
 			})
 		})
 
-		It("patches the pod", func() {
+		It("patches the pod with prefixed labels and omits invalid labels", func() {
 			err := vmMetadataSetter.SetVMMetadata(vmcid, metadata)
 			Expect(err).NotTo(HaveOccurred())
 
