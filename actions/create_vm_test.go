@@ -275,18 +275,16 @@ var _ = Describe("CreateVM", func() {
 			matches := fakeClient.MatchingActions("create", "pods")
 			Expect(matches).To(HaveLen(1))
 
+			resourceRequest := v1.ResourceList{v1.ResourceMemory: resource.MustParse("1Gi")}
 			trueValue := true
 			rootUID := int64(0)
-			resourceRequest := v1.ResourceList{
-				v1.ResourceMemory: resource.MustParse("1Gi"),
-			}
 
 			pod := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
 			Expect(pod.Name).To(Equal("agent-" + agentID))
 			Expect(pod.Labels["bosh.cloudfoundry.org/agent-id"]).To(Equal(agentID))
-			Expect(pod.Spec).To(Equal(v1.PodSpec{
-				Hostname: agentID,
-				Containers: []v1.Container{{
+			Expect(pod.Spec.Hostname).To(Equal(agentID))
+			Expect(pod.Spec.Containers).To(ConsistOf(
+				v1.Container{
 					Name:            "bosh-job",
 					Image:           "sykesm/kubernetes-stemcell:999",
 					ImagePullPolicy: v1.PullAlways,
@@ -305,11 +303,16 @@ var _ = Describe("CreateVM", func() {
 						MountPath: "/var/vcap/bosh/instance_settings.json",
 						SubPath:   "instance_settings.json",
 					}, {
+						Name:      "bosh-ephemeral",
+						MountPath: "/var/vcap/data",
+					}, {
 						Name:      "agent-pv",
 						MountPath: "/mnt/persistent",
 					}},
-				}},
-				Volumes: []v1.Volume{{
+				}))
+
+			Expect(pod.Spec.Volumes).To(ConsistOf(
+				v1.Volume{
 					Name: "bosh-config",
 					VolumeSource: v1.VolumeSource{
 						ConfigMap: &v1.ConfigMapVolumeSource{
@@ -322,15 +325,21 @@ var _ = Describe("CreateVM", func() {
 							}},
 						},
 					},
-				}, {
+				},
+				v1.Volume{
+					Name: "bosh-ephemeral",
+					VolumeSource: v1.VolumeSource{
+						EmptyDir: &v1.EmptyDirVolumeSource{},
+					},
+				},
+				v1.Volume{
 					Name: "agent-pv",
 					VolumeSource: v1.VolumeSource{
 						PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
 							ClaimName: "agent-pv-claim",
 						},
 					},
-				}},
-			}))
+				}))
 		})
 
 		Context("when creating the pod fails", func() {

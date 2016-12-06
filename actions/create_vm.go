@@ -251,6 +251,9 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 					MountPath: "/var/vcap/bosh/instance_settings.json",
 					SubPath:   "instance_settings.json",
 				}, {
+					Name:      "bosh-ephemeral",
+					MountPath: "/var/vcap/data",
+				}, {
 					Name:      "agent-pv",
 					MountPath: "/mnt/persistent",
 				}},
@@ -267,6 +270,11 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 							Path: "instance_settings.json",
 						}},
 					},
+				},
+			}, {
+				Name: "bosh-ephemeral",
+				VolumeSource: v1.VolumeSource{
+					EmptyDir: &v1.EmptyDirVolumeSource{},
 				},
 			}, {
 				Name: "agent-pv",

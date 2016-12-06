@@ -86,9 +86,6 @@ func main() {
 		vmMetadataSetter := actions.VMMetadataSetter{ClientProvider: provider}
 		result, err = cpi.Dispatch(&req, vmMetadataSetter.SetVMMetadata)
 
-	case "configure_networks":
-		result, err = nil, &cpi.NotSupportedError{}
-
 	// Disk management
 	case "create_disk":
 		result, err = cpi.Dispatch(&req, CreateDisk)
@@ -107,6 +104,10 @@ func main() {
 
 	case "get_disks":
 		result, err = cpi.Dispatch(&req, HasDisk)
+
+	// Not implemented
+	case "configure_networks":
+		result, err = nil, &cpi.NotSupportedError{}
 
 	case "snapshot_disk":
 		result, err = cpi.Dispatch(&req, func(diskCID cpi.DiskCID, meta map[string]interface{}) cpi.SnapshotCID { return "not_implemented" })
