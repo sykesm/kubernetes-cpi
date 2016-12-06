@@ -207,36 +207,64 @@ var _ = Describe("CreateVM", func() {
 			})
 		})
 
-		It("creates a NodePort service for the agent", func() {
-			_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
-			Expect(err).NotTo(HaveOccurred())
-
-			matches := fakeClient.MatchingActions("create", "services")
-			Expect(matches).To(HaveLen(1))
-
-			service := matches[0].(testing.CreateAction).GetObject().(*v1.Service)
-			Expect(service.Name).To(Equal("agent-" + agentID))
-			Expect(service.Labels["bosh.cloudfoundry.org/agent-id"]).To(Equal(agentID))
-			Expect(service.Spec).To(Equal(v1.ServiceSpec{
-				Type:  v1.ServiceTypeNodePort,
-				Ports: []v1.ServicePort{{NodePort: 32068, Port: 6868}},
-				Selector: map[string]string{
-					"bosh.cloudfoundry.org/agent-id": agentID,
-				},
-			}))
-		})
-
-		Context("when the service create fails", func() {
+		Context("when service definitions are present in the cloud properties", func() {
 			BeforeEach(func() {
-				fakeClient.PrependReactor("create", "services", func(action testing.Action) (bool, runtime.Object, error) {
-					return true, nil, errors.New("service-welp")
-				})
+				cloudProps.Services = []actions.Service{
+					{
+						Name: "director",
+						Type: "NodePort",
+						Ports: []actions.Port{
+							{Name: "agent", Protocol: "TCP", Port: 6868, NodePort: 32068},
+							{Name: "director", Protocol: "TCP", Port: 25555, NodePort: 32067},
+						},
+					},
+					{
+						Name: "blobstore", Ports: []actions.Port{
+							{Port: 25250, Protocol: "TCP"},
+						},
+					},
+				}
 			})
 
-			It("returns an error", func() {
+			It("creates the services", func() {
 				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
-				Expect(err).To(MatchError("service-welp"))
-				Expect(fakeClient.MatchingActions("create", "services")).To(HaveLen(1))
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "services")
+				Expect(matches).To(HaveLen(2))
+
+				service := matches[0].(testing.CreateAction).GetObject().(*v1.Service)
+				Expect(service.Name).To(Equal("director"))
+				Expect(service.Labels["bosh.cloudfoundry.org/agent-id"]).To(Equal(agentID))
+				Expect(service.Spec.Type).To(Equal(v1.ServiceTypeNodePort))
+				Expect(service.Spec.Selector).To(Equal(map[string]string{"bosh.cloudfoundry.org/agent-id": agentID}))
+				Expect(service.Spec.Ports).To(ConsistOf(
+					v1.ServicePort{Name: "agent", Protocol: "TCP", Port: 6868, NodePort: 32068},
+					v1.ServicePort{Name: "director", Protocol: "TCP", Port: 25555, NodePort: 32067},
+				))
+
+				service = matches[1].(testing.CreateAction).GetObject().(*v1.Service)
+				Expect(service.Name).To(Equal("blobstore"))
+				Expect(service.Labels["bosh.cloudfoundry.org/agent-id"]).To(Equal(agentID))
+				Expect(service.Spec.Type).To(Equal(v1.ServiceTypeClusterIP))
+				Expect(service.Spec.Selector).To(Equal(map[string]string{"bosh.cloudfoundry.org/agent-id": agentID}))
+				Expect(service.Spec.Ports).To(ConsistOf(
+					v1.ServicePort{Protocol: "TCP", Port: 25250},
+				))
+			})
+
+			Context("when the service create fails", func() {
+				BeforeEach(func() {
+					fakeClient.PrependReactor("create", "services", func(action testing.Action) (bool, runtime.Object, error) {
+						return true, nil, errors.New("service-welp")
+					})
+				})
+
+				It("returns an error", func() {
+					_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+					Expect(err).To(MatchError("service-welp"))
+					Expect(fakeClient.MatchingActions("create", "services")).To(HaveLen(1))
+				})
 			})
 		})
 
@@ -315,7 +343,7 @@ var _ = Describe("CreateVM", func() {
 			It("returns an error", func() {
 				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
 				Expect(err).To(MatchError("pods-welp"))
-				Expect(fakeClient.MatchingActions("create", "services")).To(HaveLen(1))
+				Expect(fakeClient.MatchingActions("create", "pods")).To(HaveLen(1))
 			})
 		})
 	})

@@ -21,8 +21,22 @@ type VMCreator struct {
 	ClientProvider kubecluster.ClientProvider
 }
 
+type Service struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Ports []Port `json:"ports"`
+}
+
+type Port struct {
+	Name     string `json:"name"`
+	NodePort int32  `json:"node_port"`
+	Port     int32  `json:"port"`
+	Protocol string `json:"protocol"`
+}
+
 type VMCloudProperties struct {
-	Context string `json:"context"`
+	Context  string    `json:"context"`
+	Services []Service `json:"services,omitempty"`
 }
 
 func (v *VMCreator) Create(
@@ -62,7 +76,7 @@ func (v *VMCreator) Create(
 	}
 
 	// create the service
-	_, err = createService(client.Services(), ns, agentID)
+	err = createServices(client.Services(), ns, agentID, cloudProps.Services)
 	if err != nil {
 		return "", err
 	}
@@ -156,29 +170,48 @@ func createConfigMap(configMapService core.ConfigMapInterface, ns, agentID strin
 	})
 }
 
-func createService(serviceClient core.ServiceInterface, ns, agentID string) (*v1.Service, error) {
-	// Need to provide a way to explicitly associate services.
-	// For the director, we will need 22 (ssh) and 25555 (director).
-	// During bosh-init, the agent will need to expose 6868.
-	return serviceClient.Create(&v1.Service{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      "agent-" + agentID,
-			Namespace: ns,
-			Labels: map[string]string{
-				"bosh.cloudfoundry.org/agent-id": agentID,
+func createServices(serviceClient core.ServiceInterface, ns, agentID string, services []Service) error {
+	for _, svc := range services {
+		serviceType := v1.ServiceTypeClusterIP
+		if svc.Type == "NodePort" {
+			serviceType = v1.ServiceTypeNodePort
+		}
+
+		var ports []v1.ServicePort
+		for _, port := range svc.Ports {
+			port := v1.ServicePort{
+				Name:     port.Name,
+				Protocol: v1.Protocol(port.Protocol),
+				Port:     port.Port,
+				NodePort: port.NodePort,
+			}
+			ports = append(ports, port)
+		}
+
+		service := &v1.Service{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      svc.Name,
+				Namespace: ns,
+				Labels: map[string]string{
+					"bosh.cloudfoundry.org/agent-id": agentID,
+				},
 			},
-		},
-		Spec: v1.ServiceSpec{
-			Type: v1.ServiceTypeNodePort,
-			Ports: []v1.ServicePort{{
-				NodePort: 32068, // FIXME
-				Port:     6868,
-			}},
-			Selector: map[string]string{
-				"bosh.cloudfoundry.org/agent-id": agentID,
+			Spec: v1.ServiceSpec{
+				Type:  serviceType,
+				Ports: ports,
+				Selector: map[string]string{
+					"bosh.cloudfoundry.org/agent-id": agentID,
+				},
 			},
-		},
-	})
+		}
+
+		_, err := serviceClient.Create(service)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func createPod(podClient core.PodInterface, ns, agentID string, image string) (*v1.Pod, error) {
