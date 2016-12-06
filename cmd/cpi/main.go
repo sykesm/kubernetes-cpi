@@ -58,10 +58,10 @@ func main() {
 
 	// Stemcell Management
 	case "create_stemcell":
-		result, err = cpi.Dispatch(&req, CreateStemcell)
+		result, err = cpi.Dispatch(&req, actions.CreateStemcell)
 
 	case "delete_stemcell":
-		result, err = cpi.Dispatch(&req, DeleteStemcell)
+		result, err = cpi.Dispatch(&req, actions.DeleteStemcell)
 
 	// VM management
 	case "create_vm":
@@ -158,18 +158,6 @@ func loadAgentConfig(path string) (*config.Agent, error) {
 	}
 
 	return &agentConf, nil
-}
-
-type StemcellCloudProperties struct {
-	Image string `json:"image"`
-}
-
-func CreateStemcell(image string, cloudProps StemcellCloudProperties) (cpi.StemcellCID, error) {
-	return cpi.StemcellCID(cloudProps.Image), nil
-}
-
-func DeleteStemcell(stemcellCID cpi.StemcellCID) error {
-	return nil
 }
 
 type CreateDiskCloudProperties struct{}
