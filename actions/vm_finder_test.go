@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/1.4/testing"
 )
 
-var _ = Describe("HasVM", func() {
+var _ = Describe("VMFinder", func() {
 	var (
 		fakeClient   *fakes.Client
 		fakeProvider *fakes.ClientProvider
