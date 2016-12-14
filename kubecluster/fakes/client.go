@@ -30,16 +30,20 @@ type Client struct {
 	fake.Clientset
 }
 
-func (c *Client) Pods() core.PodInterface {
-	return c.Core().Pods(c.Namespace())
+func (c *Client) ConfigMaps() core.ConfigMapInterface {
+	return c.Core().ConfigMaps(c.Namespace())
 }
 
 func (c *Client) Services() core.ServiceInterface {
 	return c.Core().Services(c.Namespace())
 }
 
-func (c *Client) ConfigMaps() core.ConfigMapInterface {
-	return c.Core().ConfigMaps(c.Namespace())
+func (c *Client) PersistentVolumeClaims() core.PersistentVolumeClaimInterface {
+	return c.Core().PersistentVolumeClaims(c.Namespace())
+}
+
+func (c *Client) Pods() core.PodInterface {
+	return c.Core().Pods(c.Namespace())
 }
 
 func (c *Client) MatchingActions(verb, resource string) []testing.Action {

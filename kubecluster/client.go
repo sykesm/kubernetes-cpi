@@ -10,9 +10,11 @@ type Client interface {
 	Namespace() string
 
 	Core() core.CoreInterface
+
+	ConfigMaps() core.ConfigMapInterface
+	PersistentVolumeClaims() core.PersistentVolumeClaimInterface
 	Pods() core.PodInterface
 	Services() core.ServiceInterface
-	ConfigMaps() core.ConfigMapInterface
 }
 
 type client struct {
@@ -22,6 +24,8 @@ type client struct {
 	*kubernetes.Clientset
 }
 
+var _ Client = &client{}
+
 func (c *client) Context() string {
 	return c.context
 }
@@ -30,14 +34,18 @@ func (c *client) Namespace() string {
 	return c.namespace
 }
 
+func (c *client) ConfigMaps() core.ConfigMapInterface {
+	return c.Core().ConfigMaps(c.namespace)
+}
+
+func (c *client) PersistentVolumeClaims() core.PersistentVolumeClaimInterface {
+	return c.Core().PersistentVolumeClaims(c.namespace)
+}
+
 func (c *client) Pods() core.PodInterface {
 	return c.Core().Pods(c.namespace)
 }
 
 func (c *client) Services() core.ServiceInterface {
 	return c.Core().Services(c.namespace)
-}
-
-func (c *client) ConfigMaps() core.ConfigMapInterface {
-	return c.Core().ConfigMaps(c.namespace)
 }

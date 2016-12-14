@@ -28,8 +28,8 @@ func (f *VMFinder) FindVM(vmcid cpi.VMCID) (string, *v1.Pod, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	listOptions := api.ListOptions{LabelSelector: agentSelector}
 
+	listOptions := api.ListOptions{LabelSelector: agentSelector}
 	podList, err := client.Pods().List(listOptions)
 	if err != nil {
 		return "", nil, err

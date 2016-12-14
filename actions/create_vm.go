@@ -22,9 +22,10 @@ type VMCreator struct {
 }
 
 type Service struct {
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-	Ports []Port `json:"ports"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	ClusterIP string `json:"cluster_ip"`
+	Ports     []Port `json:"ports"`
 }
 
 type Port struct {
@@ -120,11 +121,7 @@ func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env 
 
 		Env:      env,
 		Networks: agentNetworks,
-		Disks: agent.Disks{
-			Persistent: map[string]string{
-				"not-implemented": "/mnt/persistent",
-			},
-		},
+		Disks:    agent.Disks{},
 	}
 	return settings, nil
 }
@@ -197,8 +194,9 @@ func createServices(serviceClient core.ServiceInterface, ns, agentID string, ser
 				},
 			},
 			Spec: v1.ServiceSpec{
-				Type:  serviceType,
-				Ports: ports,
+				Type:      serviceType,
+				ClusterIP: svc.ClusterIP,
+				Ports:     ports,
 				Selector: map[string]string{
 					"bosh.cloudfoundry.org/agent-id": agentID,
 				},
@@ -253,9 +251,6 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 				}, {
 					Name:      "bosh-ephemeral",
 					MountPath: "/var/vcap/data",
-				}, {
-					Name:      "agent-pv",
-					MountPath: "/mnt/persistent",
 				}},
 			}},
 			Volumes: []v1.Volume{{
@@ -275,13 +270,6 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 				Name: "bosh-ephemeral",
 				VolumeSource: v1.VolumeSource{
 					EmptyDir: &v1.EmptyDirVolumeSource{},
-				},
-			}, {
-				Name: "agent-pv",
-				VolumeSource: v1.VolumeSource{
-					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "agent-pv-claim",
-					},
 				},
 			}},
 		},

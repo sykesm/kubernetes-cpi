@@ -25,6 +25,12 @@ var kubeConfigFlag = flag.String(
 	"Path to the serialized kubernetes configuration file",
 )
 
+var debugFlag = flag.Bool(
+	"debug",
+	false,
+	"Write CPI requests and responses to os.Stderr",
+)
+
 func main() {
 	flag.Parse()
 
@@ -42,6 +48,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	debugJSON("request", payload)
 
 	var req cpi.Request
 	err = json.Unmarshal(payload, &req)
@@ -79,16 +87,17 @@ func main() {
 		vmFinder := &actions.VMFinder{ClientProvider: provider}
 		result, err = cpi.Dispatch(&req, vmFinder.HasVM)
 
-	case "reboot_vm":
-		result, err = cpi.Dispatch(&req, RebootVM)
-
 	case "set_vm_metadata":
 		vmMetadataSetter := actions.VMMetadataSetter{ClientProvider: provider}
 		result, err = cpi.Dispatch(&req, vmMetadataSetter.SetVMMetadata)
 
 	// Disk management
 	case "create_disk":
-		result, err = cpi.Dispatch(&req, CreateDisk)
+		diskCreator := actions.DiskCreator{
+			ClientProvider:    provider,
+			GUIDGeneratorFunc: actions.CreateGUID,
+		}
+		result, err = cpi.Dispatch(&req, diskCreator.CreateDisk)
 
 	case "delete_disk":
 		result, err = cpi.Dispatch(&req, DeleteDisk)
@@ -109,11 +118,14 @@ func main() {
 	case "configure_networks":
 		result, err = nil, &cpi.NotSupportedError{}
 
+	case "reboot_vm":
+		result, err = nil, &cpi.NotSupportedError{}
+
 	case "snapshot_disk":
-		result, err = cpi.Dispatch(&req, func(diskCID cpi.DiskCID, meta map[string]interface{}) cpi.SnapshotCID { return "not_implemented" })
+		result, err = nil, &cpi.NotImplementedError{}
 
 	case "delete_snapshot":
-		result, err = cpi.Dispatch(&req, func(snapshotCID cpi.SnapshotCID) {})
+		result, err = nil, &cpi.NotImplementedError{}
 
 	default:
 		err = fmt.Errorf("Unexpected method: %q", req.Method)
@@ -123,9 +135,18 @@ func main() {
 		panic(err)
 	}
 
-	err = json.NewEncoder(os.Stdout).Encode(result)
+	response, err := json.Marshal(result)
 	if err != nil {
 		panic(err)
+	}
+
+	debugJSON("response", response)
+	fmt.Printf("%s", response)
+}
+
+func debugJSON(stem string, payload []byte) {
+	if *debugFlag {
+		fmt.Fprintf(os.Stderr, `{ "%s": %s }%c`, stem, payload, '\n')
 	}
 }
 
@@ -161,12 +182,6 @@ func loadAgentConfig(path string) (*config.Agent, error) {
 	return &agentConf, nil
 }
 
-type CreateDiskCloudProperties struct{}
-
-func CreateDisk(size uint, cloudProps CreateDiskCloudProperties, vmcid cpi.VMCID) (cpi.DiskCID, error) {
-	return cpi.DiskCID("not-implemented"), nil
-}
-
 func DeleteDisk(diskCID cpi.DiskCID) error {
 	return nil
 }
@@ -185,8 +200,4 @@ func HasDisk(diskCID cpi.DiskCID) bool {
 
 func GetDisks(vmcid cpi.VMCID) ([]cpi.DiskCID, error) {
 	return []cpi.DiskCID{}, nil
-}
-
-func RebootVM(vmcid cpi.VMCID) error {
-	return nil
 }

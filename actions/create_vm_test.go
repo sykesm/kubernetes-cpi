@@ -219,7 +219,9 @@ var _ = Describe("CreateVM", func() {
 						},
 					},
 					{
-						Name: "blobstore", Ports: []actions.Port{
+						Name:      "blobstore",
+						ClusterIP: "10.0.0.1",
+						Ports: []actions.Port{
 							{Port: 25250, Protocol: "TCP"},
 						},
 					},
@@ -247,6 +249,7 @@ var _ = Describe("CreateVM", func() {
 				Expect(service.Name).To(Equal("blobstore"))
 				Expect(service.Labels["bosh.cloudfoundry.org/agent-id"]).To(Equal(agentID))
 				Expect(service.Spec.Type).To(Equal(v1.ServiceTypeClusterIP))
+				Expect(service.Spec.ClusterIP).To(Equal("10.0.0.1"))
 				Expect(service.Spec.Selector).To(Equal(map[string]string{"bosh.cloudfoundry.org/agent-id": agentID}))
 				Expect(service.Spec.Ports).To(ConsistOf(
 					v1.ServicePort{Protocol: "TCP", Port: 25250},
@@ -305,9 +308,6 @@ var _ = Describe("CreateVM", func() {
 					}, {
 						Name:      "bosh-ephemeral",
 						MountPath: "/var/vcap/data",
-					}, {
-						Name:      "agent-pv",
-						MountPath: "/mnt/persistent",
 					}},
 				}))
 
@@ -330,14 +330,6 @@ var _ = Describe("CreateVM", func() {
 					Name: "bosh-ephemeral",
 					VolumeSource: v1.VolumeSource{
 						EmptyDir: &v1.EmptyDirVolumeSource{},
-					},
-				},
-				v1.Volume{
-					Name: "agent-pv",
-					VolumeSource: v1.VolumeSource{
-						PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-							ClaimName: "agent-pv-claim",
-						},
 					},
 				}))
 		})
@@ -392,6 +384,12 @@ var _ = Describe("CreateVM", func() {
 			agentSettings, err := vmCreator.InstanceSettings(agentID, networks, env)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(agentSettings.Env).To(Equal(env))
+		})
+
+		It("generates an empty persistent disk map by default", func() {
+			agentSettings, err := vmCreator.InstanceSettings(agentID, networks, env)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agentSettings.Disks).To(Equal(agent.Disks{}))
 		})
 
 		It("sets the network configuration", func() {
