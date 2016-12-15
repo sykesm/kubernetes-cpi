@@ -41,6 +41,14 @@ var _ = Describe("VMFinder", func() {
 	})
 
 	Describe("HasVM", func() {
+		It("gets a client with the context from the VMCID", func() {
+			_, err := vmFinder.HasVM(cpi.VMCID("context-name:agentID"))
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fakeProvider.NewCallCount()).To(Equal(1))
+			Expect(fakeProvider.NewArgsForCall(0)).To(Equal("context-name"))
+		})
+
 		It("returns true when the pod is found", func() {
 			found, err := vmFinder.HasVM(cpi.VMCID("context-name:agentID"))
 			Expect(err).NotTo(HaveOccurred())
@@ -106,7 +114,7 @@ var _ = Describe("VMFinder", func() {
 
 		Context("when the label can't be parsed", func() {
 			It("returns an error", func() {
-				_, _, err := vmFinder.FindVM(cpi.VMCID("missing-id:%&^*****@*^"))
+				_, _, err := vmFinder.FindVM(cpi.VMCID("context-name:%&^*****@*^"))
 				Expect(err).To(HaveOccurred())
 			})
 		})

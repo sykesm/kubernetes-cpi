@@ -6,11 +6,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
+
+	"code.cloudfoundry.org/clock"
 
 	"github.com/sykesm/kubernetes-cpi/actions"
 	"github.com/sykesm/kubernetes-cpi/config"
 	"github.com/sykesm/kubernetes-cpi/cpi"
 	"github.com/sykesm/kubernetes-cpi/kubecluster"
+)
+
+const (
+	DefaultPostRecreateDelay = 5 * time.Second
+	DefaultPodReadyTimeout   = 60 * time.Second
 )
 
 var agentConfigFlag = flag.String(
@@ -99,20 +107,28 @@ func main() {
 		}
 		result, err = cpi.Dispatch(&req, diskCreator.CreateDisk)
 
-	case "delete_disk":
-		result, err = cpi.Dispatch(&req, DeleteDisk)
+	case "attach_disk":
+		diskAttacher := actions.DiskAttacher{
+			ClientProvider:    provider,
+			Clock:             clock.NewClock(),
+			PodReadyTimeout:   DefaultPodReadyTimeout,
+			PostRecreateDelay: DefaultPostRecreateDelay,
+		}
+		result, err = cpi.Dispatch(&req, diskAttacher.AttachDisk)
 
 	case "has_disk":
-		result, err = cpi.Dispatch(&req, HasDisk)
+		diskFinder := actions.DiskFinder{ClientProvider: provider}
+		result, err = cpi.Dispatch(&req, diskFinder.HasDisk)
 
-	case "attach_disk":
-		result, err = cpi.Dispatch(&req, AttachDisk)
+	case "delete_disk":
+		result, err = cpi.Dispatch(&req, DeleteDisk)
 
 	case "detach_disk":
 		result, err = cpi.Dispatch(&req, DetachDisk)
 
 	case "get_disks":
-		result, err = cpi.Dispatch(&req, HasDisk)
+		diskGetter := actions.DiskGetter{ClientProvider: provider}
+		result, err = cpi.Dispatch(&req, diskGetter.GetDisks)
 
 	// Not implemented
 	case "configure_networks":
@@ -186,18 +202,6 @@ func DeleteDisk(diskCID cpi.DiskCID) error {
 	return nil
 }
 
-func AttachDisk(vmcid cpi.VMCID, diskCID cpi.DiskCID) error {
-	return nil
-}
-
 func DetachDisk(vmcid cpi.VMCID, diskCID cpi.DiskCID) error {
 	return nil
-}
-
-func HasDisk(diskCID cpi.DiskCID) bool {
-	return false
-}
-
-func GetDisks(vmcid cpi.VMCID) ([]cpi.DiskCID, error) {
-	return []cpi.DiskCID{}, nil
 }
