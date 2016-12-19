@@ -108,13 +108,13 @@ func main() {
 		result, err = cpi.Dispatch(&req, diskCreator.CreateDisk)
 
 	case "attach_disk":
-		diskAttacher := actions.DiskAttacher{
+		volumeManager := actions.VolumeManager{
 			ClientProvider:    provider,
 			Clock:             clock.NewClock(),
 			PodReadyTimeout:   DefaultPodReadyTimeout,
 			PostRecreateDelay: DefaultPostRecreateDelay,
 		}
-		result, err = cpi.Dispatch(&req, diskAttacher.AttachDisk)
+		result, err = cpi.Dispatch(&req, volumeManager.AttachDisk)
 
 	case "has_disk":
 		diskFinder := actions.DiskFinder{ClientProvider: provider}
@@ -124,7 +124,13 @@ func main() {
 		result, err = cpi.Dispatch(&req, DeleteDisk)
 
 	case "detach_disk":
-		result, err = cpi.Dispatch(&req, DetachDisk)
+		volumeManager := actions.VolumeManager{
+			ClientProvider:    provider,
+			Clock:             clock.NewClock(),
+			PodReadyTimeout:   DefaultPodReadyTimeout,
+			PostRecreateDelay: DefaultPostRecreateDelay,
+		}
+		result, err = cpi.Dispatch(&req, volumeManager.DetachDisk)
 
 	case "get_disks":
 		diskGetter := actions.DiskGetter{ClientProvider: provider}
@@ -199,9 +205,5 @@ func loadAgentConfig(path string) (*config.Agent, error) {
 }
 
 func DeleteDisk(diskCID cpi.DiskCID) error {
-	return nil
-}
-
-func DetachDisk(vmcid cpi.VMCID, diskCID cpi.DiskCID) error {
 	return nil
 }
