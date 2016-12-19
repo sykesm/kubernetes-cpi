@@ -121,7 +121,8 @@ func main() {
 		result, err = cpi.Dispatch(&req, diskFinder.HasDisk)
 
 	case "delete_disk":
-		result, err = cpi.Dispatch(&req, DeleteDisk)
+		diskDeleter := actions.DiskDeleter{ClientProvider: provider}
+		result, err = cpi.Dispatch(&req, diskDeleter.DeleteDisk)
 
 	case "detach_disk":
 		volumeManager := actions.VolumeManager{
@@ -202,8 +203,4 @@ func loadAgentConfig(path string) (*config.Agent, error) {
 	}
 
 	return &agentConf, nil
-}
-
-func DeleteDisk(diskCID cpi.DiskCID) error {
-	return nil
 }
