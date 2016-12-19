@@ -2,7 +2,6 @@ package actions
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/sykesm/kubernetes-cpi/agent"
 	"github.com/sykesm/kubernetes-cpi/config"
@@ -89,15 +88,6 @@ func (v *VMCreator) Create(
 	}
 
 	return NewVMCID(client.Context(), agentID), nil
-}
-
-func NewVMCID(context, agentID string) cpi.VMCID {
-	return cpi.VMCID(context + ":" + agentID)
-}
-
-func ParseVMCID(vmcid cpi.VMCID) (context, agentID string) {
-	parts := strings.SplitN(string(vmcid), ":", 2)
-	return parts[0], parts[1]
 }
 
 func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env cpi.Environment) (*agent.Settings, error) {
