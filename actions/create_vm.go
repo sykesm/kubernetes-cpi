@@ -82,7 +82,7 @@ func (v *VMCreator) Create(
 	}
 
 	// create the pod
-	_, err = createPod(client.Pods(), ns, agentID, string(stemcellCID))
+	_, err = createPod(client.Pods(), ns, agentID, string(stemcellCID), networks)
 	if err != nil {
 		return "", err
 	}
@@ -202,18 +202,29 @@ func createServices(serviceClient core.ServiceInterface, ns, agentID string, ser
 	return nil
 }
 
-func createPod(podClient core.PodInterface, ns, agentID string, image string) (*v1.Pod, error) {
+func createPod(podClient core.PodInterface, ns, agentID, image string, networks cpi.Networks) (*v1.Pod, error) {
 	trueValue := true
 	rootUID := int64(0)
 
 	resourceRequest := v1.ResourceList{
+		v1.ResourceMemory: resource.MustParse("64Mi"),
+	}
+	resourceLimit := v1.ResourceList{
 		v1.ResourceMemory: resource.MustParse("1Gi"),
+	}
+
+	annotations := map[string]string{}
+	for _, nw := range networks {
+		if len(nw.IP) > 0 {
+			annotations["bosh.cloudfoundry.org/ip-address"] = nw.IP
+		}
 	}
 
 	return podClient.Create(&v1.Pod{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      "agent-" + agentID,
-			Namespace: ns,
+			Name:        "agent-" + agentID,
+			Namespace:   ns,
+			Annotations: annotations,
 			Labels: map[string]string{
 				"bosh.cloudfoundry.org/agent-id": agentID,
 			},
@@ -227,7 +238,7 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 				Command:         []string{"/usr/sbin/runsvdir-start"},
 				Args:            []string{},
 				Resources: v1.ResourceRequirements{
-					Limits:   resourceRequest,
+					Limits:   resourceLimit,
 					Requests: resourceRequest,
 				},
 				SecurityContext: &v1.SecurityContext{

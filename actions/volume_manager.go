@@ -88,9 +88,10 @@ func (v *VolumeManager) recreatePod(client kubecluster.Client, op Operation, age
 
 	updateVolumes(op, &pod.Spec, diskID)
 	pod.ObjectMeta = v1.ObjectMeta{
-		Name:      pod.Name,
-		Namespace: pod.Namespace,
-		Labels:    pod.Labels,
+		Name:        pod.Name,
+		Namespace:   pod.Namespace,
+		Annotations: pod.Annotations,
+		Labels:      pod.Labels,
 	}
 	pod.Status = v1.PodStatus{}
 
