@@ -56,19 +56,9 @@ var _ = Describe("CreateVM", func() {
 		agentID = "agent-id"
 		env = cpi.Environment{"passed": "along"}
 		networks = cpi.Networks{
-			"network-1": cpi.Network{
-				Type:    "manual",
-				IP:      "1.2.3.4",
-				Netmask: "255.255.0.0",
-				Gateway: "1.2.0.1",
-				DNS:     []string{"8.8.8.8", "8.8.4.4"},
-				Default: []string{"dns", "gateway"},
-				CloudProperties: map[string]interface{}{
-					"key": "value",
-				},
-			},
-			"network-2": cpi.Network{
+			"dynamic-network": cpi.Network{
 				Type: "dynamic",
+				DNS:  []string{"8.8.8.8", "8.8.4.4"},
 				CloudProperties: map[string]interface{}{
 					"dynamic-key": "dynamic-value",
 				},
@@ -175,6 +165,47 @@ var _ = Describe("CreateVM", func() {
 			})
 		})
 
+		Context("when no networks are defined", func() {
+			BeforeEach(func() {
+				networks = cpi.Networks{}
+			})
+
+			It("returns an error", func() {
+				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+				Expect(err).To(MatchError("a network is required"))
+			})
+		})
+
+		Context("when multiple networks are defined", func() {
+			BeforeEach(func() {
+				networks = cpi.Networks{
+					"manual-network": cpi.Network{
+						Type:    "manual",
+						IP:      "1.2.3.4",
+						Netmask: "255.255.0.0",
+						Gateway: "1.2.0.1",
+						DNS:     []string{"8.8.8.8", "8.8.4.4"},
+						Default: []string{"dns", "gateway"},
+						CloudProperties: map[string]interface{}{
+							"key": "value",
+						},
+					},
+					"dynamic-network": cpi.Network{
+						Type: "dynamic",
+						DNS:  []string{"8.8.8.8", "8.8.4.4"},
+						CloudProperties: map[string]interface{}{
+							"dynamic-key": "dynamic-value",
+						},
+					},
+				}
+			})
+
+			It("returns an error", func() {
+				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+				Expect(err).To(MatchError("multiple networks not supported"))
+			})
+		})
+
 		It("creates the config map for agent settings", func() {
 			_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
 			Expect(err).NotTo(HaveOccurred())
@@ -278,12 +309,12 @@ var _ = Describe("CreateVM", func() {
 			matches := fakeClient.MatchingActions("create", "pods")
 			Expect(matches).To(HaveLen(1))
 
-			resourceRequest := v1.ResourceList{v1.ResourceMemory: resource.MustParse("1Gi")}
 			trueValue := true
 			rootUID := int64(0)
 
 			pod := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
 			Expect(pod.Name).To(Equal("agent-" + agentID))
+			Expect(pod.Annotations).To(BeEmpty())
 			Expect(pod.Labels["bosh.cloudfoundry.org/agent-id"]).To(Equal(agentID))
 			Expect(pod.Spec.Hostname).To(Equal(agentID))
 			Expect(pod.Spec.Containers).To(ConsistOf(
@@ -293,10 +324,6 @@ var _ = Describe("CreateVM", func() {
 					ImagePullPolicy: v1.PullAlways,
 					Command:         []string{"/usr/sbin/runsvdir-start"},
 					Args:            []string{},
-					Resources: v1.ResourceRequirements{
-						Limits:   resourceRequest,
-						Requests: resourceRequest,
-					},
 					SecurityContext: &v1.SecurityContext{
 						Privileged: &trueValue,
 						RunAsUser:  &rootUID,
@@ -332,6 +359,111 @@ var _ = Describe("CreateVM", func() {
 						EmptyDir: &v1.EmptyDirVolumeSource{},
 					},
 				}))
+		})
+
+		Context("when the network contains an IP", func() {
+			BeforeEach(func() {
+				networks = cpi.Networks{
+					"manual-network": cpi.Network{
+						Type:    "manual",
+						IP:      "1.2.3.4",
+						Netmask: "255.255.0.0",
+						Gateway: "1.2.0.1",
+						DNS:     []string{"8.8.8.8", "8.8.4.4"},
+						Default: []string{"dns", "gateway"},
+						CloudProperties: map[string]interface{}{
+							"key": "value",
+						},
+					},
+				}
+			})
+
+			It("annotates the pod with the IP address information", func() {
+				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "pods")
+				Expect(matches).To(HaveLen(1))
+
+				pod := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+				Expect(pod.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
+			})
+		})
+
+		Context("when resource definitions are present in the cloud properties", func() {
+			BeforeEach(func() {
+				cloudProps.Resources = actions.Resources{
+					Limits: actions.ResourceList{
+						actions.ResourceMemory: "1Gi",
+						actions.ResourceCPU:    "500m",
+					},
+					Requests: actions.ResourceList{
+						actions.ResourceMemory: "64Mi",
+						actions.ResourceCPU:    "100m",
+					},
+				}
+			})
+
+			It("sets resource limts and requests on the Pod", func() {
+				_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "pods")
+				Expect(matches).To(HaveLen(1))
+
+				pod := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+				Expect(pod.Spec.Containers[0].Resources).To(Equal(v1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceMemory: resource.MustParse("64Mi"),
+						v1.ResourceCPU:    resource.MustParse("100m"),
+					},
+					Limits: v1.ResourceList{
+						v1.ResourceMemory: resource.MustParse("1Gi"),
+						v1.ResourceCPU:    resource.MustParse("500m"),
+					},
+				}))
+			})
+
+			Context("when a resource request quantity cannot be parsed", func() {
+				BeforeEach(func() {
+					cloudProps.Resources = actions.Resources{
+						Requests: actions.ResourceList{actions.ResourceMemory: "12nuts"},
+						Limits:   actions.ResourceList{actions.ResourceMemory: "1Gi"},
+					}
+				})
+
+				It("returns an error", func() {
+					_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+					Expect(err).To(MatchError(ContainSubstring("quantities must match the regular expression")))
+				})
+			})
+
+			Context("when resource limit quantity cannot be parsed", func() {
+				BeforeEach(func() {
+					cloudProps.Resources = actions.Resources{
+						Requests: actions.ResourceList{actions.ResourceMemory: "1Gi"},
+						Limits:   actions.ResourceList{actions.ResourceMemory: "12nuts"},
+					}
+				})
+
+				It("returns an error", func() {
+					_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+					Expect(err).To(MatchError(ContainSubstring("quantities must match the regular expression")))
+				})
+			})
+
+			Context("when an unsupported resource type is specified", func() {
+				BeforeEach(func() {
+					cloudProps.Resources = actions.Resources{
+						Requests: actions.ResourceList{"goo": "1Gi"},
+					}
+				})
+
+				It("returns an error", func() {
+					_, err := vmCreator.Create(agentID, stemcellCID, cloudProps, networks, diskCIDs, env)
+					Expect(err).To(MatchError("goo is not a supported resource type"))
+				})
+			})
 		})
 
 		Context("when creating the pod fails", func() {
@@ -396,25 +528,20 @@ var _ = Describe("CreateVM", func() {
 			agentSettings, err := vmCreator.InstanceSettings(agentID, networks, env)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(agentSettings.Networks).To(Equal(agent.Networks{
-				"network-1": agent.Network{
-					Type:          "manual",
-					IP:            "1.2.3.4",
-					Netmask:       "255.255.0.0",
-					Gateway:       "1.2.0.1",
-					DNS:           []string{"8.8.8.8", "8.8.4.4"},
-					Default:       []string{"dns", "gateway"},
-					Preconfigured: true,
-				},
-				"network-2": agent.Network{
+				"dynamic-network": agent.Network{
 					Type:          "dynamic",
 					Preconfigured: true,
+					DNS: []string{
+						"8.8.8.8",
+						"8.8.4.4",
+					},
 				},
 			}))
 		})
 
 		Context("when the networks fails to remarshal", func() {
 			BeforeEach(func() {
-				networks["network-2"].CloudProperties["channel"] = make(chan struct{})
+				networks["dynamic-network"].CloudProperties["channel"] = make(chan struct{})
 			})
 
 			It("returns an error", func() {

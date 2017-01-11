@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	DefaultPostRecreateDelay = 5 * time.Second
+	DefaultPostRecreateDelay = 15 * time.Second
 	DefaultPodReadyTimeout   = 60 * time.Second
 )
 

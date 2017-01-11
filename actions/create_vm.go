@@ -2,6 +2,8 @@ package actions
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/sykesm/kubernetes-cpi/agent"
 	"github.com/sykesm/kubernetes-cpi/config"
@@ -34,9 +36,24 @@ type Port struct {
 	Protocol string `json:"protocol"`
 }
 
+type ResourceName string
+
+const (
+	ResourceCPU    ResourceName = "cpu"
+	ResourceMemory ResourceName = "memory"
+)
+
+type ResourceList map[ResourceName]string
+
+type Resources struct {
+	Limits   ResourceList `json:"limits"`
+	Requests ResourceList `json:"requests"`
+}
+
 type VMCloudProperties struct {
-	Context  string    `json:"context"`
-	Services []Service `json:"services,omitempty"`
+	Context   string    `json:"context"`
+	Services  []Service `json:"services,omitempty"`
+	Resources Resources `json:"resources,omitempty"`
 }
 
 func (v *VMCreator) Create(
@@ -47,6 +64,12 @@ func (v *VMCreator) Create(
 	diskCIDs []cpi.DiskCID,
 	env cpi.Environment,
 ) (cpi.VMCID, error) {
+
+	// only one network is supported
+	network, err := getNetwork(networks)
+	if err != nil {
+		return "", err
+	}
 
 	// create the client set
 	client, err := v.ClientProvider.New(cloudProps.Context)
@@ -82,12 +105,27 @@ func (v *VMCreator) Create(
 	}
 
 	// create the pod
-	_, err = createPod(client.Pods(), ns, agentID, string(stemcellCID))
+	_, err = createPod(client.Pods(), ns, agentID, string(stemcellCID), *network, cloudProps.Resources)
 	if err != nil {
 		return "", err
 	}
 
 	return NewVMCID(client.Context(), agentID), nil
+}
+
+func getNetwork(networks cpi.Networks) (*cpi.Network, error) {
+	switch len(networks) {
+	case 0:
+		return nil, errors.New("a network is required")
+	case 1:
+		for _, nw := range networks {
+			return &nw, nil
+		}
+	default:
+		return nil, errors.New("multiple networks not supported")
+	}
+
+	panic("unreachable")
 }
 
 func (v *VMCreator) InstanceSettings(agentID string, networks cpi.Networks, env cpi.Environment) (*agent.Settings, error) {
@@ -202,18 +240,25 @@ func createServices(serviceClient core.ServiceInterface, ns, agentID string, ser
 	return nil
 }
 
-func createPod(podClient core.PodInterface, ns, agentID string, image string) (*v1.Pod, error) {
+func createPod(podClient core.PodInterface, ns, agentID, image string, network cpi.Network, resources Resources) (*v1.Pod, error) {
 	trueValue := true
 	rootUID := int64(0)
 
-	resourceRequest := v1.ResourceList{
-		v1.ResourceMemory: resource.MustParse("1Gi"),
+	annotations := map[string]string{}
+	if len(network.IP) > 0 {
+		annotations["bosh.cloudfoundry.org/ip-address"] = network.IP
+	}
+
+	resourceReqs, err := getPodResourceRequirements(resources)
+	if err != nil {
+		return nil, err
 	}
 
 	return podClient.Create(&v1.Pod{
 		ObjectMeta: v1.ObjectMeta{
-			Name:      "agent-" + agentID,
-			Namespace: ns,
+			Name:        "agent-" + agentID,
+			Namespace:   ns,
+			Annotations: annotations,
 			Labels: map[string]string{
 				"bosh.cloudfoundry.org/agent-id": agentID,
 			},
@@ -226,10 +271,7 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 				ImagePullPolicy: v1.PullAlways,
 				Command:         []string{"/usr/sbin/runsvdir-start"},
 				Args:            []string{},
-				Resources: v1.ResourceRequirements{
-					Limits:   resourceRequest,
-					Requests: resourceRequest,
-				},
+				Resources:       resourceReqs,
 				SecurityContext: &v1.SecurityContext{
 					Privileged: &trueValue,
 					RunAsUser:  &rootUID,
@@ -264,4 +306,51 @@ func createPod(podClient core.PodInterface, ns, agentID string, image string) (*
 			}},
 		},
 	})
+}
+
+func getPodResourceRequirements(resources Resources) (v1.ResourceRequirements, error) {
+	limits, err := getResourceList(resources.Limits)
+	if err != nil {
+		return v1.ResourceRequirements{}, err
+	}
+
+	requests, err := getResourceList(resources.Requests)
+	if err != nil {
+		return v1.ResourceRequirements{}, err
+	}
+
+	return v1.ResourceRequirements{Limits: limits, Requests: requests}, nil
+}
+
+func getResourceList(resourceList ResourceList) (v1.ResourceList, error) {
+	if resourceList == nil {
+		return nil, nil
+	}
+
+	list := v1.ResourceList{}
+	for k, v := range resourceList {
+		quantity, err := resource.ParseQuantity(v)
+		if err != nil {
+			return nil, err
+		}
+
+		name, err := kubeResourceName(k)
+		if err != nil {
+			return nil, err
+		}
+		list[name] = quantity
+	}
+
+	return list, nil
+}
+
+func kubeResourceName(name ResourceName) (v1.ResourceName, error) {
+	switch name {
+	case ResourceMemory:
+		return v1.ResourceMemory, nil
+	case ResourceCPU:
+		return v1.ResourceCPU, nil
+	default:
+		return "", fmt.Errorf("%s is not a supported resource type", name)
+	}
 }

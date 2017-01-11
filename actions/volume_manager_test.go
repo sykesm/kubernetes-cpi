@@ -41,6 +41,9 @@ var _ = Describe("VolumeManager", func() {
 		agentMeta = v1.ObjectMeta{
 			Name:      "agent-agent-id",
 			Namespace: "bosh-namespace",
+			Annotations: map[string]string{
+				"annotation-key": "annotation-value",
+			},
 			Labels: map[string]string{
 				"key": "value",
 			},
