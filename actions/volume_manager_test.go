@@ -200,6 +200,26 @@ var _ = Describe("VolumeManager", func() {
 			Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
 		})
 
+		Context("when the annotation map is nil", func() {
+			BeforeEach(func() {
+				fakeClient.PrependReactor("get", "pods", func(action testing.Action) (bool, runtime.Object, error) {
+					initialPod.Annotations = nil
+					return true, initialPod, nil
+				})
+			})
+
+			It("propagates the PodIP to the ip-address annotation", func() {
+				err := volumeManager.AttachDisk(vmcid, diskCID)
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "pods")
+				Expect(matches).To(HaveLen(1))
+
+				updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+				Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
+			})
+		})
+
 		Context("when the ip-address annotation is present", func() {
 			BeforeEach(func() {
 				fakeClient.PrependReactor("get", "pods", func(action testing.Action) (bool, runtime.Object, error) {
@@ -616,6 +636,26 @@ var _ = Describe("VolumeManager", func() {
 
 			updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
 			Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
+		})
+
+		Context("when the annotation map is nil", func() {
+			BeforeEach(func() {
+				fakeClient.PrependReactor("get", "pods", func(action testing.Action) (bool, runtime.Object, error) {
+					initialPod.Annotations = nil
+					return true, initialPod, nil
+				})
+			})
+
+			It("propagates the PodIP to the ip-address annotation", func() {
+				err := volumeManager.DetachDisk(vmcid, diskCID)
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "pods")
+				Expect(matches).To(HaveLen(1))
+
+				updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+				Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
+			})
 		})
 
 		Context("when the ip-address annotation is present", func() {

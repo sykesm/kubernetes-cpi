@@ -88,6 +88,10 @@ func (v *VolumeManager) recreatePod(client kubecluster.Client, op Operation, age
 
 	updateVolumes(op, &pod.Spec, diskID)
 
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{}
+	}
+
 	if len(pod.Annotations["bosh.cloudfoundry.org/ip-address"]) == 0 {
 		pod.Annotations["bosh.cloudfoundry.org/ip-address"] = pod.Status.PodIP
 	}
