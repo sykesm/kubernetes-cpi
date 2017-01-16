@@ -62,6 +62,7 @@ var _ = Describe("VolumeManager", func() {
 
 	Describe("AttachDisk", func() {
 		var initialPodSpec v1.PodSpec
+		var initialPod *v1.Pod
 
 		BeforeEach(func() {
 			initialPodSpec = v1.PodSpec{
@@ -75,6 +76,28 @@ var _ = Describe("VolumeManager", func() {
 				}},
 			}
 
+			initialPod = &v1.Pod{
+				ObjectMeta: agentMeta,
+				Spec:       initialPodSpec,
+				Status: v1.PodStatus{
+					Phase: v1.PodRunning,
+					PodIP: "1.2.3.4",
+					ContainerStatuses: []v1.ContainerStatus{{
+						Name:  "bosh-job",
+						Ready: true,
+						State: v1.ContainerState{
+							Running: &v1.ContainerStateRunning{},
+						},
+					}, {
+						Name:  "ignored-name",
+						Ready: true,
+						State: v1.ContainerState{
+							Running: &v1.ContainerStateRunning{},
+						},
+					}},
+				},
+			}
+
 			fakeClient = fakes.NewClient(
 				&v1.ConfigMap{
 					ObjectMeta: agentMeta,
@@ -82,26 +105,7 @@ var _ = Describe("VolumeManager", func() {
 						"instance_settings": `{}`,
 					},
 				},
-				&v1.Pod{
-					ObjectMeta: agentMeta,
-					Spec:       initialPodSpec,
-					Status: v1.PodStatus{
-						Phase: v1.PodRunning,
-						ContainerStatuses: []v1.ContainerStatus{{
-							Name:  "bosh-job",
-							Ready: true,
-							State: v1.ContainerState{
-								Running: &v1.ContainerStateRunning{},
-							},
-						}, {
-							Name:  "ignored-name",
-							Ready: true,
-							State: v1.ContainerState{
-								Running: &v1.ContainerStateRunning{},
-							},
-						}},
-					},
-				},
+				initialPod,
 			)
 			fakeClient.ContextReturns("context-name")
 			fakeClient.NamespaceReturns("bosh-namespace")
@@ -112,10 +116,13 @@ var _ = Describe("VolumeManager", func() {
 				Spec:       initialPodSpec,
 				Status: v1.PodStatus{
 					Phase: v1.PodRunning,
+					PodIP: "1.2.3.4",
 					ContainerStatuses: []v1.ContainerStatus{{
 						Name:  "bosh-job",
 						Ready: true,
-						State: v1.ContainerState{Running: &v1.ContainerStateRunning{}},
+						State: v1.ContainerState{
+							Running: &v1.ContainerStateRunning{},
+						},
 					}},
 				},
 			})
@@ -178,7 +185,39 @@ var _ = Describe("VolumeManager", func() {
 			Expect(matches).To(HaveLen(1))
 
 			updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+			delete(updated.Annotations, "bosh.cloudfoundry.org/ip-address")
 			Expect(updated.ObjectMeta).To(Equal(agentMeta))
+		})
+
+		It("propagates the PodIP to the ip-address annotation", func() {
+			err := volumeManager.AttachDisk(vmcid, diskCID)
+			Expect(err).NotTo(HaveOccurred())
+
+			matches := fakeClient.MatchingActions("create", "pods")
+			Expect(matches).To(HaveLen(1))
+
+			updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+			Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
+		})
+
+		Context("when the ip-address annotation is present", func() {
+			BeforeEach(func() {
+				fakeClient.PrependReactor("get", "pods", func(action testing.Action) (bool, runtime.Object, error) {
+					initialPod.Annotations["bosh.cloudfoundry.org/ip-address"] = "10.10.10.10"
+					return true, initialPod, nil
+				})
+			})
+
+			It("does not overwrite the annotation", func() {
+				err := volumeManager.AttachDisk(vmcid, diskCID)
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "pods")
+				Expect(matches).To(HaveLen(1))
+
+				updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+				Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("10.10.10.10"))
+			})
 		})
 
 		It("adds pvc volume for the disk to the pod", func() {
@@ -263,6 +302,7 @@ var _ = Describe("VolumeManager", func() {
 				Spec:       initialPodSpec,
 				Status: v1.PodStatus{
 					Phase: v1.PodPending,
+					PodIP: "1.2.3.4",
 					ContainerStatuses: []v1.ContainerStatus{{
 						Name:  "bosh-job",
 						Ready: true,
@@ -440,6 +480,7 @@ var _ = Describe("VolumeManager", func() {
 
 	Describe("DetachDisk", func() {
 		var initialPodSpec v1.PodSpec
+		var initialPod *v1.Pod
 
 		BeforeEach(func() {
 			initialPodSpec = v1.PodSpec{
@@ -461,6 +502,22 @@ var _ = Describe("VolumeManager", func() {
 				}},
 			}
 
+			initialPod = &v1.Pod{
+				ObjectMeta: agentMeta,
+				Spec:       initialPodSpec,
+				Status: v1.PodStatus{
+					Phase: v1.PodRunning,
+					PodIP: "1.2.3.4",
+					ContainerStatuses: []v1.ContainerStatus{{
+						Name:  "bosh-job",
+						Ready: true,
+						State: v1.ContainerState{
+							Running: &v1.ContainerStateRunning{},
+						},
+					}},
+				},
+			}
+
 			fakeClient = fakes.NewClient(
 				&v1.ConfigMap{
 					ObjectMeta: agentMeta,
@@ -468,20 +525,7 @@ var _ = Describe("VolumeManager", func() {
 						"instance_settings": `{ "disks": {"persistent": { "context-name:disk-id": "/mnt/disk-id" }} }`,
 					},
 				},
-				&v1.Pod{
-					ObjectMeta: agentMeta,
-					Spec:       initialPodSpec,
-					Status: v1.PodStatus{
-						Phase: v1.PodRunning,
-						ContainerStatuses: []v1.ContainerStatus{{
-							Name:  "bosh-job",
-							Ready: true,
-							State: v1.ContainerState{
-								Running: &v1.ContainerStateRunning{},
-							},
-						}},
-					},
-				},
+				initialPod,
 			)
 			fakeClient.ContextReturns("context-name")
 			fakeClient.NamespaceReturns("bosh-namespace")
@@ -491,6 +535,7 @@ var _ = Describe("VolumeManager", func() {
 				ObjectMeta: agentMeta,
 				Spec:       initialPodSpec,
 				Status: v1.PodStatus{
+					PodIP: "1.2.3.4",
 					Phase: v1.PodRunning,
 					ContainerStatuses: []v1.ContainerStatus{{
 						Name:  "bosh-job",
@@ -558,7 +603,39 @@ var _ = Describe("VolumeManager", func() {
 			Expect(matches).To(HaveLen(1))
 
 			updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+			delete(updated.Annotations, "bosh.cloudfoundry.org/ip-address")
 			Expect(updated.ObjectMeta).To(Equal(agentMeta))
+		})
+
+		It("propagates the PodIP to the ip-address annotation", func() {
+			err := volumeManager.DetachDisk(vmcid, diskCID)
+			Expect(err).NotTo(HaveOccurred())
+
+			matches := fakeClient.MatchingActions("create", "pods")
+			Expect(matches).To(HaveLen(1))
+
+			updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+			Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("1.2.3.4"))
+		})
+
+		Context("when the ip-address annotation is present", func() {
+			BeforeEach(func() {
+				fakeClient.PrependReactor("get", "pods", func(action testing.Action) (bool, runtime.Object, error) {
+					initialPod.Annotations["bosh.cloudfoundry.org/ip-address"] = "10.10.10.10"
+					return true, initialPod, nil
+				})
+			})
+
+			It("does not overwrite the annotation", func() {
+				err := volumeManager.DetachDisk(vmcid, diskCID)
+				Expect(err).NotTo(HaveOccurred())
+
+				matches := fakeClient.MatchingActions("create", "pods")
+				Expect(matches).To(HaveLen(1))
+
+				updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+				Expect(updated.Annotations["bosh.cloudfoundry.org/ip-address"]).To(Equal("10.10.10.10"))
+			})
 		})
 
 		It("removes the pvc volume for the disk from the pod", func() {
@@ -596,6 +673,90 @@ var _ = Describe("VolumeManager", func() {
 					MountPath: "/mnt/disk-id",
 				},
 			))
+		})
+
+		It("does not carry the pod status forward", func() {
+			err := volumeManager.DetachDisk(vmcid, diskCID)
+			Expect(err).NotTo(HaveOccurred())
+
+			matches := fakeClient.MatchingActions("create", "pods")
+			Expect(matches).To(HaveLen(1))
+
+			updated := matches[0].(testing.CreateAction).GetObject().(*v1.Pod)
+			Expect(updated.Status).To(BeZero())
+		})
+
+		It("waits for the pod to be running", func() {
+			event, ok := <-fakeWatch.ResultChan()
+			Expect(ok).To(BeTrue())
+
+			fakeClient.PrependReactor("create", "pods", func(action testing.Action) (bool, runtime.Object, error) {
+				pod := action.(testing.CreateAction).GetObject().(*v1.Pod)
+				pod.ResourceVersion = "created-resource-version"
+				return true, pod, nil
+			})
+
+			result := make(chan error)
+			go func() { result <- volumeManager.DetachDisk(vmcid, diskCID) }()
+
+			Eventually(func() []testing.Action {
+				return fakeClient.MatchingActions("watch", "pods")
+			}).Should(HaveLen(1))
+			Expect(fakeWatch.IsStopped()).To(BeFalse())
+
+			By("transitioning pod status to pending")
+			fakeWatch.Modify(&v1.Pod{
+				ObjectMeta: agentMeta,
+				Spec:       initialPodSpec,
+				Status: v1.PodStatus{
+					Phase: v1.PodPending,
+				},
+			})
+			Consistently(result).ShouldNot(Receive())
+
+			By("transitioning bosh job container to running")
+			fakeWatch.Modify(&v1.Pod{
+				ObjectMeta: agentMeta,
+				Spec:       initialPodSpec,
+				Status: v1.PodStatus{
+					Phase: v1.PodPending,
+					PodIP: "1.2.3.4",
+					ContainerStatuses: []v1.ContainerStatus{{
+						Name:  "bosh-job",
+						Ready: true,
+						State: v1.ContainerState{
+							Running: &v1.ContainerStateRunning{},
+						},
+					}},
+				},
+			})
+			Consistently(result).ShouldNot(Receive())
+
+			By("transitioning pod and container to running")
+			fakeWatch.Modify(event.Object)
+			Eventually(result).Should(Receive(BeNil()))
+
+			matches := fakeClient.MatchingActions("watch", "pods")
+			Expect(matches).To(HaveLen(1))
+
+			watchRestrictions := matches[0].(testing.WatchAction).GetWatchRestrictions()
+			Expect(watchRestrictions.Labels.String()).To(Equal("bosh.cloudfoundry.org/agent-id=agent-id"))
+			Expect(watchRestrictions.ResourceVersion).To(Equal("created-resource-version"))
+			Expect(fakeWatch.IsStopped()).To(BeTrue())
+		})
+
+		It("waits for the post recreate duration", func() {
+			volumeManager.PostRecreateDelay = 5 * time.Second
+
+			result := make(chan error)
+			go func() { result <- volumeManager.DetachDisk(vmcid, diskCID) }()
+
+			Consistently(result).ShouldNot(Receive())
+			fakeClock.Increment(3 * time.Second)
+			Consistently(result).ShouldNot(Receive())
+
+			fakeClock.Increment(3 * time.Second)
+			Eventually(result).Should(Receive(BeNil()))
 		})
 
 		Context("when the vmcid context and diskcid context are different", func() {

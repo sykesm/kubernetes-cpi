@@ -87,6 +87,11 @@ func (v *VolumeManager) recreatePod(client kubecluster.Client, op Operation, age
 	}
 
 	updateVolumes(op, &pod.Spec, diskID)
+
+	if len(pod.Annotations["bosh.cloudfoundry.org/ip-address"]) == 0 {
+		pod.Annotations["bosh.cloudfoundry.org/ip-address"] = pod.Status.PodIP
+	}
+
 	pod.ObjectMeta = v1.ObjectMeta{
 		Name:        pod.Name,
 		Namespace:   pod.Namespace,
